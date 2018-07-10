@@ -1,0 +1,7 @@
+Build LLVM by using CMAKE to create the Makefile:
+
+	cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=On ../llvm/
+
+Then run make.  Make sure to do a parallel build, otherwise it will take a long time:
+
+	make -j4
