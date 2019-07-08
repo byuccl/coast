@@ -14,6 +14,9 @@ COAST
 
    setup
    make_system
+   eclipse
+   passes
+   troubleshooting
 
 Folder guide
 ==============
@@ -37,3 +40,10 @@ tests
 ---------
 
 Benchmarks we use to validate the correct operation of COAST.
+
+Additional Resources
+=====================
+
+Matthew Bohman's thesis_.
+
+.. _thesis: https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7724&context=etd
