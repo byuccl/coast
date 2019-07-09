@@ -1,3 +1,5 @@
+.. include:: substitutions.inc
+
 Control Flow Checking via Software Signatures (CFCSS)
 *******************************************************
 
@@ -13,13 +15,6 @@ Control-flow checking by software signatures [#f1]_
 
 Algorithm
 =========
-
-.. |bn| replace:: :math:`b_n`
-.. |sn| replace:: :math:`s_n`
-.. |dn| replace:: :math:`d_n`
-.. |Gn| replace:: :math:`G_n`
-.. |Dn| replace:: :math:`D_n`
-.. |xor| replace:: :math:`\oplus`
 
 The algorithm we determined to use is one found in the research paper mentioned above. A brief description will be included here.
 
@@ -48,11 +43,6 @@ There is a danger when dealing with dense control flow graphs that there will be
 
     branch fan-in problem
 
-.. |b1| replace:: :math:`b_1`
-.. |b2| replace:: :math:`b_2`
-.. |b3| replace:: :math:`b_3`
-.. |b4| replace:: :math:`b_4`
-.. |b5| replace:: :math:`b_5`
 
 If |b1| and |b3| are assigned the same signature, then there will be no issue branching to |b4| . However, this opens up the possibility for illegal branching from |b1| to |b5| without being caught. If all signatures are generated randomly, without any duplicates, then |b4| will register correct branching from either |b1| or |b3| , but not both.
 

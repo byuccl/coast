@@ -19,7 +19,7 @@
 
 project = 'COAST'
 copyright = '2019, Jeffrey Goeders, Benjamin James'
-author = 'Jeffrey Goeders, Benjamin James'
+author = 'Jeffrey Goeders, Benjamin James, Matthew Bohman'
 
 
 # -- General configuration ---------------------------------------------------

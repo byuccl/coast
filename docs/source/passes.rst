@@ -18,6 +18,11 @@ Description
 Configuration Options
 ======================
 
+COAST can be configured to apply replicating rules in other ways than by the default using :ref:`coast_cli_params`, :ref:`in_code_directives`, and a :ref:`coast_conf_file`.
+
+
+.. _coast_cli_params:
+
 Command Line Parameters
 -------------------------
 
@@ -86,6 +91,9 @@ These options are only applicable to the ``-DWC`` and ``-TMR`` passes.
 
 Note: Replication rules defined by Chielle et al. [#f5]_\ .
 
+
+.. _in_code_directives:
+
 In-code Directives
 -------------------
 
@@ -124,13 +132,19 @@ In-code Directives
 
 See the file COAST.h_
 
-.. _COAST.h: https://github.com/byuccl/coast/blob/master/projects/dataflowProtection/COAST.h
+.. _COAST.h: https://github.com/byuccl/coast/blob/master/tests/COAST.h
 
+
+.. _coast_conf_file:
 
 Configuration File
 --------------------
 
 Instead of repeating the same command line options across several compilations, we have created a configuration file, "functions.config" that can capture the same behavior. It is found in the "dataflowProtection" pass folder. The location of this file can be specified using the ``-configFile=<...>`` option. The options are the same as the command line alternatives.
+
+The `default file`_ contains functions we have identified as commonly treated differently than the default COAST options.
+
+.. _default file: https://github.com/byuccl/coast/blob/master/projects/dataflowProtection/functions.config
 
 
 When to use replication command line options
@@ -172,9 +186,10 @@ When to use replication command line options
 
 
 Details
---------
+=========
 
-**Replication Rules**\ :
+Replication Rules
+-------------------
 
 VAR3+, the set of replication rules introduced by Chielle et al. [#f5]_\ , instructs that all registers and instructions, except store instructions, should be duplicated. The data used in branches, the addresses before stores and jumps, and the data used in stores are all synchronized and checked against their duplicates. VAR3+ claims to catch 95% of data errors, so we used it as a starting point for automated mitigation. However, we removed rule D2, which does not replicate store instructions, in favor of D1, which does. This results in replication of all variables in memory, and is desirable as microcontrollers have no guarantee of protected memory. The synchronization rules are included in both DWC and TMR protection. Rules C1 and C2, synchronizing before each read and write on the register, respectively, are not included in our pass because these were shown to provide an excessive amount of synchronization. G1, replicating all registers, and C6, synchronizing before branch or store instructions, cannot be disabled as these are necessary for the protection to function properly.
 
@@ -182,23 +197,25 @@ The first option, ``-noMemReplication``, should be used whenever memory has a se
 
 The option ``-noStoreAddrSync`` corresponds to C5. In EDDI, memory was simply duplicated and each duplicate was offset from the original value by a constant. However, COAST runs before the linker, and thus has no notion of an address space. We implement rules C3 and C5, checking addresses before stores and loads, for data structures such as arrays and structs that have an offset from a base address. These offsets, instead of the base addresses, are compared in the synchronization logic.
 
-**Replication Scope**\ :
+Replication Scope
+--------------------
 
 The user can specify any functions and global variables that should not be protected using ``-ignoreFns`` and ``-ignoreGlbls``. At minimum, these options should be used to exclude code that interacts with hard- ware devices (GPIO, UART) from the SoR. Replicating this code is likely to lead to errors. The option ``-replicateFnCalls`` causes user functions to be called in a coarse grained way, meaning the call is replicated instead of fine-grained instruction replication within the function body. Library function calls can also be excluded from replication via the flag ``-skipLibCalls``, which causes those calls to only be executed once. These two options should be used when multiple independent copies of a return value should be generated, instead of a single return value propagating through all replicated instructions. Changing the scope of replication can cause problems across function calls.
 
-**Other Options**\ :
+Other Options
+----------------
 
-*Error Logging*\ : This option was developed for tests in a radiation beam, where upsets are stochastically distributed, unlike fault injection tests where one upset is guaranteed for each run. COAST can be instructed to keep track of the number of corrected faults via the flag ``-countErrors``. This flag allows the program to detect corrected upsets, which yields more precise results on the number of radiation-induced SEUs. This option is only applicable to TMR because DWC halts on the first error. A global variable, ``TMR_ERROR_CNT``, is incremented each time that all three copies of the datum do not agree. If this global is not present in the source code then the pass creates it. The user can print this value at the end of program execution, or read it using a debugging tool.
+**Error Logging**\ : This option was developed for tests in a radiation beam, where upsets are stochastically distributed, unlike fault injection tests where one upset is guaranteed for each run. COAST can be instructed to keep track of the number of corrected faults via the flag ``-countErrors``. This flag allows the program to detect corrected upsets, which yields more precise results on the number of radiation-induced SEUs. This option is only applicable to TMR because DWC halts on the first error. A global variable, ``TMR_ERROR_CNT``, is incremented each time that all three copies of the datum do not agree. If this global is not present in the source code then the pass creates it. The user can print this value at the end of program execution, or read it using a debugging tool.
 
-*Error Handlers*\ : The user has the choice of how to handle DWC and CFCSS errors because these are uncorrectable. The default behavior is to create ``abort()`` function calls if errors are detected. However, user functions can be called in place of ``abort()``. In order to do so, the source code needs a definition for the function ``void FAULT_DETECTED_DWC()`` or ``void FAULT_DETECTED_CFCSS`` for DWC and CFCSS, respectively.
+**Error Handlers**\ : The user has the choice of how to handle DWC and CFCSS errors because these are uncorrectable. The default behavior is to create ``abort()`` function calls if errors are detected. However, user functions can be called in place of ``abort()``. In order to do so, the source code needs a definition for the function ``void FAULT_DETECTED_DWC()`` or ``void FAULT_DETECTED_CFCSS`` for DWC and CFCSS, respectively.
 
-*Input Initialization*\ : Global variables with initial values provide an interesting problem for testing. By default, these initial values are assigned to each replicate at compile time. This models the scenario where the SoR expands into the source of the data. However, this does not accurately model the case when code inputs need to be replicated at runtime. This could happen, for instance, if a UART was feeding data into a program and storing the result in a global variable. When global variables are listed using ``-runtimeInitGlbls`` the pass inserts ``memcpy()`` calls to copy global variable data into the replicates at runtime. This supports scalar values as well as aggregate data types, such as arrays and structures.
+**Input Initialization**\ : Global variables with initial values provide an interesting problem for testing. By default, these initial values are assigned to each replicate at compile time. This models the scenario where the SoR expands into the source of the data. However, this does not accurately model the case when code inputs need to be replicated at runtime. This could happen, for instance, if a UART was feeding data into a program and storing the result in a global variable. When global variables are listed using ``-runtimeInitGlbls`` the pass inserts ``memcpy()`` calls to copy global variable data into the replicates at runtime. This supports scalar values as well as aggregate data types, such as arrays and structures.
 
-*Interleaving*\ : In previous work replicated instructions have all been placed immediately after the original instructions. Interleaving instructions in this manner effectively reduces the number of available registers because each load statement executes repeatedly, causing each original value to occupy more registers. For TMR, this means that a single load instruction in the initial code uses three registers in the protected program. As a result, the processor may start using the stack as extra storage. This introduces additional memory accesses, increasing both the code size and execution time. Placing each set of replicated instructions immediately before the next synchronization point lessens the pressure on the register file by eliminating the need for multiple copies of data to be live simultaneously.
+**Interleaving**\ : In previous work replicated instructions have all been placed immediately after the original instructions. Interleaving instructions in this manner effectively reduces the number of available registers because each load statement executes repeatedly, causing each original value to occupy more registers. For TMR, this means that a single load instruction in the initial code uses three registers in the protected program. As a result, the processor may start using the stack as extra storage. This introduces additional memory accesses, increasing both the code size and execution time. Placing each set of replicated instructions immediately before the next synchronization point lessens the pressure on the register file by eliminating the need for multiple copies of data to be live simultaneously.
 
 By default, COAST groups copies of instructions before synchronization points, effectively partitioning regions of code into segments where each copy of the program runs uninterrupted. Alternately, the user can specify that instructions should be interleaved using ``-i``.
 
-*Printing Status Messages*\ : Using the ``-verbose`` flag will print more information about what the pass is doing. This includes removing unused functions and unused global strings. These are mainly helpful for examining when your code is not behaving exactly as expected.
+**Printing Status Messages**\ : Using the ``-verbose`` flag will print more information about what the pass is doing. This includes removing unused functions and unused global strings. These are mainly helpful for examining when your code is not behaving exactly as expected.
 
 If you are developing passes, then on occasion you might need to include more printing statements. Using ``-dumpModule`` causes the pass to print out the entirety of the LLVM module to the command line in a format that can be tested using ``lli``. This is mainly helpful if the pass is not cleaning up after itself properly. The function ``dumpModule()`` can also be placed in different places in the code for additional debugging capabilities.
 

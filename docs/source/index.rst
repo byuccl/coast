@@ -9,15 +9,15 @@ COAST
 **CO**\ mpiler-\ **A**\ ssisted **S**\ oftware fault **T**\ olerance
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
+    :caption: Contents:
 
-   setup
-   make_system
-   eclipse
-   passes
-   troubleshooting
-   cfcss
+    setup
+    make_system
+    eclipse
+    passes
+    troubleshooting
+    cfcss
 
 Folder guide
 ==============
@@ -42,9 +42,25 @@ tests
 
 Benchmarks we use to validate the correct operation of COAST.
 
+Results
+========
+
+See the results of fault injection and radiation beam testing
+
+.. toctree::
+    :maxdepth: 1
+    :glob:
+
+    results/*
+
+
 Additional Resources
 =====================
 
-Matthew Bohman's thesis_.
+- Matthew Bohman's `Master's thesis`_.
 
-.. _thesis: https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7724&context=etd
+- IEEE Transactions on Nuclear Science, Vol. 66 Issue 1 - `Microcontroller Compiler-Assisted Software Fault Tolerance`_
+
+.. _Master's thesis: https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7724&context=etd
+
+.. _Microcontroller Compiler-Assisted Software Fault Tolerance: https://ieeexplore.ieee.org/document/8571250
