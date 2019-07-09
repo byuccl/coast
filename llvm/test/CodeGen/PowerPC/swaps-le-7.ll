@@ -1,4 +1,4 @@
-; RUN: llc -mcpu=pwr8 -mtriple=powerpc64le-unknown-linux-gnu -O3 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mcpu=pwr8 -mtriple=powerpc64le-unknown-linux-gnu -O3 < %s | FileCheck %s
 ;
 ; This is a regression test based on https://llvm.org/bugs/show_bug.cgi?id=27735
 ;
@@ -11,16 +11,16 @@
 ; CHECK-LABEL: @zg
 ; CHECK: xxspltd
 ; CHECK-NEXT: xxspltd
-; CHECK-NEXT: xxswapd
 ; CHECK-NEXT: xvmuldp
-; CHECK-NEXT: xvmuldp
-; CHECK-NEXT: xvsubdp
-; CHECK-NEXT: xvadddp
-; CHECK-NEXT: xxpermdi
-; CHECK-NEXT: xvsubdp
-; CHECK-NEXT: xxswapd
+; CHECK-DAG: xvmuldp
+; CHECK-DAG: xvsubdp
+; CHECK-DAG: xvadddp
+; CHECK-DAG: xxswapd
+; CHECK-DAG: xxpermdi
+; CHECK-DAG: xvsubdp
+; CHECK: xxswapd
 ; CHECK-NEXT: stxvd2x
-; CHECK-NEXT: blr
+; CHECK: blr
 
 ; Function Attrs: noinline
 define void @zg(i8* %.G0011_640.0, i8* %.G0012_642.0, <2 x double>* %JJ, <2 x double>* %.ka0000_391, double %.unpack, double %.unpack66) #0 {

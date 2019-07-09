@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file implements an optimization pass using store result values.
+/// This file implements an optimization pass using store result values.
 ///
 /// WebAssembly's store instructions return the stored value. This is to enable
 /// an optimization wherein uses of the stored value can be replaced by uses of
@@ -24,12 +24,12 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssembly.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "WebAssembly.h"
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "WebAssemblySubtarget.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/CodeGen/LiveIntervalAnalysis.h"
+#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -46,9 +46,7 @@ public:
   static char ID; // Pass identification, replacement for typeid
   WebAssemblyStoreResults() : MachineFunctionPass(ID) {}
 
-  const char *getPassName() const override {
-    return "WebAssembly Store Results";
-  }
+  StringRef getPassName() const override { return "WebAssembly Store Results"; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -70,6 +68,9 @@ private:
 } // end anonymous namespace
 
 char WebAssemblyStoreResults::ID = 0;
+INITIALIZE_PASS(WebAssemblyStoreResults, DEBUG_TYPE,
+                "Optimize store result values for WebAssembly", false, false)
+
 FunctionPass *llvm::createWebAssemblyStoreResults() {
   return new WebAssemblyStoreResults();
 }
@@ -90,7 +91,7 @@ static bool ReplaceDominatedUses(MachineBasicBlock &MBB, MachineInstr &MI,
 
   SmallVector<SlotIndex, 4> Indices;
 
-  for (auto I = MRI.use_begin(FromReg), E = MRI.use_end(); I != E;) {
+  for (auto I = MRI.use_nodbg_begin(FromReg), E = MRI.use_nodbg_end(); I != E;) {
     MachineOperand &O = *I++;
     MachineInstr *Where = O.getParent();
 
@@ -110,8 +111,8 @@ static bool ReplaceDominatedUses(MachineBasicBlock &MBB, MachineInstr &MI,
       continue;
 
     Changed = true;
-    DEBUG(dbgs() << "Setting operand " << O << " in " << *Where << " from "
-                 << MI << "\n");
+    LLVM_DEBUG(dbgs() << "Setting operand " << O << " in " << *Where << " from "
+                      << MI << "\n");
     O.setReg(ToReg);
 
     // If the store's def was previously dead, it is no longer.
@@ -139,15 +140,6 @@ static bool ReplaceDominatedUses(MachineBasicBlock &MBB, MachineInstr &MI,
   return Changed;
 }
 
-static bool optimizeStore(MachineBasicBlock &MBB, MachineInstr &MI,
-                          const MachineRegisterInfo &MRI,
-                          MachineDominatorTree &MDT,
-                          LiveIntervals &LIS) {
-  unsigned ToReg = MI.getOperand(0).getReg();
-  unsigned FromReg = MI.getOperand(WebAssembly::StoreValueOperandNo).getReg();
-  return ReplaceDominatedUses(MBB, MI, FromReg, ToReg, MRI, MDT, LIS);
-}
-
 static bool optimizeCall(MachineBasicBlock &MBB, MachineInstr &MI,
                          const MachineRegisterInfo &MRI,
                          MachineDominatorTree &MDT,
@@ -165,7 +157,7 @@ static bool optimizeCall(MachineBasicBlock &MBB, MachineInstr &MI,
   if (!callReturnsInput)
     return false;
 
-  LibFunc::Func Func;
+  LibFunc Func;
   if (!LibInfo.getLibFunc(Name, Func))
     return false;
 
@@ -178,7 +170,7 @@ static bool optimizeCall(MachineBasicBlock &MBB, MachineInstr &MI,
 }
 
 bool WebAssemblyStoreResults::runOnMachineFunction(MachineFunction &MF) {
-  DEBUG({
+  LLVM_DEBUG({
     dbgs() << "********** Store Results **********\n"
            << "********** Function: " << MF.getName() << '\n';
   });
@@ -197,21 +189,10 @@ bool WebAssemblyStoreResults::runOnMachineFunction(MachineFunction &MF) {
   assert(MRI.tracksLiveness() && "StoreResults expects liveness tracking");
 
   for (auto &MBB : MF) {
-    DEBUG(dbgs() << "Basic Block: " << MBB.getName() << '\n');
+    LLVM_DEBUG(dbgs() << "Basic Block: " << MBB.getName() << '\n');
     for (auto &MI : MBB)
       switch (MI.getOpcode()) {
       default:
-        break;
-      case WebAssembly::STORE8_I32:
-      case WebAssembly::STORE16_I32:
-      case WebAssembly::STORE8_I64:
-      case WebAssembly::STORE16_I64:
-      case WebAssembly::STORE32_I64:
-      case WebAssembly::STORE_F32:
-      case WebAssembly::STORE_F64:
-      case WebAssembly::STORE_I32:
-      case WebAssembly::STORE_I64:
-        Changed |= optimizeStore(MBB, MI, MRI, MDT, LIS);
         break;
       case WebAssembly::CALL_I32:
       case WebAssembly::CALL_I64:

@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file implements the COFF-specific dumper for llvm-objdump.
+/// This file implements the COFF-specific dumper for llvm-objdump.
 /// It outputs the Win64 EH data structures as plain text.
 /// The encoding of the unwind codes is described in MSDN:
 /// http://msdn.microsoft.com/en-us/library/ck9asaa9.aspx
@@ -17,14 +17,11 @@
 
 #include "llvm-objdump.h"
 #include "llvm/Object/COFF.h"
+#include "llvm/Object/COFFImportFile.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/Win64EH.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cstring>
-#include <system_error>
 
 using namespace llvm;
 using namespace object;
@@ -176,12 +173,10 @@ resolveSectionAndAddress(const COFFObjectFile *Obj, const SymbolRef &Sym,
 // the function returns the symbol used for the relocation at the offset.
 static std::error_code resolveSymbol(const std::vector<RelocationRef> &Rels,
                                      uint64_t Offset, SymbolRef &Sym) {
-  for (std::vector<RelocationRef>::const_iterator I = Rels.begin(),
-                                                  E = Rels.end();
-                                                  I != E; ++I) {
-    uint64_t Ofs = I->getOffset();
+  for (auto &R : Rels) {
+    uint64_t Ofs = R.getOffset();
     if (Ofs == Offset) {
-      Sym = *I->getSymbol();
+      Sym = *R.getSymbol();
       return std::error_code();
     }
   }
@@ -353,7 +348,7 @@ static void printImportTables(const COFFObjectFile *Obj) {
     return;
   outs() << "The Import Tables:\n";
   for (const ImportDirectoryEntryRef &DirRef : Obj->import_directories()) {
-    const import_directory_table_entry *Dir;
+    const coff_import_directory_table_entry *Dir;
     StringRef Name;
     if (DirRef.getImportTableEntry(Dir)) return;
     if (DirRef.getName(Name)) return;
@@ -458,7 +453,7 @@ static bool getPDataSection(const COFFObjectFile *Obj,
       Rels.push_back(Reloc);
 
     // Sort relocations by address.
-    std::sort(Rels.begin(), Rels.end(), RelocAddressLess);
+    llvm::sort(Rels.begin(), Rels.end(), RelocAddressLess);
 
     ArrayRef<uint8_t> Contents;
     error(Obj->getSectionContents(Pdata, Contents));
@@ -617,11 +612,34 @@ void llvm::printCOFFFileHeader(const object::ObjectFile *Obj) {
   printExportTable(file);
 }
 
+void llvm::printCOFFSymbolTable(const object::COFFImportFile *i) {
+  unsigned Index = 0;
+  bool IsCode = i->getCOFFImportHeader()->getType() == COFF::IMPORT_CODE;
+
+  for (const object::BasicSymbolRef &Sym : i->symbols()) {
+    std::string Name;
+    raw_string_ostream NS(Name);
+
+    Sym.printName(NS);
+    NS.flush();
+
+    outs() << "[" << format("%2d", Index) << "]"
+           << "(sec " << format("%2d", 0) << ")"
+           << "(fl 0x00)" // Flag bits, which COFF doesn't have.
+           << "(ty " << format("%3x", (IsCode && Index) ? 32 : 0) << ")"
+           << "(scl " << format("%3x", 0) << ") "
+           << "(nx " << 0 << ") "
+           << "0x" << format("%08x", 0) << " " << Name << '\n';
+
+    ++Index;
+  }
+}
+
 void llvm::printCOFFSymbolTable(const COFFObjectFile *coff) {
   for (unsigned SI = 0, SE = coff->getNumberOfSymbols(); SI != SE; ++SI) {
-    ErrorOr<COFFSymbolRef> Symbol = coff->getSymbol(SI);
+    Expected<COFFSymbolRef> Symbol = coff->getSymbol(SI);
     StringRef Name;
-    error(Symbol.getError());
+    error(errorToErrorCode(Symbol.takeError()));
     error(coff->getSymbolName(*Symbol, Name));
 
     outs() << "[" << format("%2d", SI) << "]"

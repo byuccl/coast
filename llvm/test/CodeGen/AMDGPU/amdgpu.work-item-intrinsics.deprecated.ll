@@ -1,23 +1,8 @@
-; RUN: llc -march=amdgcn -mcpu=SI -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=GCN -check-prefix=SI-NOHSA -check-prefix=GCN-NOHSA -check-prefix=FUNC %s
-; RUN: llc -march=amdgcn -mcpu=tonga -verify-machineinstrs < %s | FileCheck -check-prefix=VI  -check-prefix=VI-NOHSA -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=FUNC %s
+; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=GCN -check-prefix=SI-NOHSA -check-prefix=GCN-NOHSA -check-prefix=FUNC %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs < %s | FileCheck -check-prefix=VI  -check-prefix=VI-NOHSA -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=FUNC %s
 ; RUN: llc -march=r600 -mcpu=redwood < %s | FileCheck -check-prefix=EG -check-prefix=FUNC %s
 
 ; Legacy intrinsics that just read implicit parameters
-
-; FUNC-LABEL: {{^}}workdim_legacy:
-; SI-NOHSA: s_load_dword [[VAL:s[0-9]+]], s[0:1], 0xb
-; VI-NOHSA: s_load_dword [[VAL:s[0-9]+]], s[0:1], 0x2c
-; GCN-NOHSA: v_mov_b32_e32 [[VVAL:v[0-9]+]], [[VAL]]
-; GCN-NOHSA: buffer_store_dword [[VVAL]]
-
-; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
-; EG: MOV {{\*? *}}[[VAL]], KC0[2].Z
-define void @workdim_legacy (i32 addrspace(1)* %out) {
-entry:
-  %0 = call i32 @llvm.AMDGPU.read.workdim() #0
-  store i32 %0, i32 addrspace(1)* %out
-  ret void
-}
 
 ; FUNC-LABEL: {{^}}ngroups_x:
 ; SI-NOHSA: s_load_dword [[VAL:s[0-9]+]], s[0:1], 0x0
@@ -27,7 +12,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[0].X
-define void @ngroups_x (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @ngroups_x (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.ngroups.x() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -42,7 +27,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[0].Y
-define void @ngroups_y (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @ngroups_y (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.ngroups.y() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -57,7 +42,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[0].Z
-define void @ngroups_z (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @ngroups_z (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.ngroups.z() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -72,7 +57,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[0].W
-define void @global_size_x (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @global_size_x (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.global.size.x() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -87,7 +72,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[1].X
-define void @global_size_y (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @global_size_y (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.global.size.y() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -102,7 +87,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[1].Y
-define void @global_size_z (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @global_size_z (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.global.size.z() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -117,7 +102,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[1].Z
-define void @local_size_x (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @local_size_x (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.local.size.x() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -132,7 +117,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[1].W
-define void @local_size_y (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @local_size_y (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.local.size.y() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -147,7 +132,7 @@ entry:
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[VAL:T[0-9]+\.X]]
 ; EG: MOV {{\*? *}}[[VAL]], KC0[2].X
-define void @local_size_z (i32 addrspace(1)* %out) {
+define amdgpu_kernel void @local_size_z (i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.local.size.z() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -168,7 +153,7 @@ entry:
 ; GCN: COMPUTE_PGM_RSRC2:TGID_Y_EN: 0
 ; GCN: COMPUTE_PGM_RSRC2:TGID_Z_EN: 0
 ; GCN: COMPUTE_PGM_RSRC2:TIDIG_COMP_CNT: 0
-define void @tgid_x_legacy(i32 addrspace(1)* %out) {
+define amdgpu_kernel void @tgid_x_legacy(i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.tgid.x() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -180,7 +165,7 @@ entry:
 ; GCN-NOHSA: buffer_store_dword [[VVAL]]
 
 ; GCN-NOHSA: COMPUTE_PGM_RSRC2:USER_SGPR: 2
-define void @tgid_y_legacy(i32 addrspace(1)* %out) {
+define amdgpu_kernel void @tgid_y_legacy(i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.tgid.y() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -196,7 +181,7 @@ entry:
 ; GCN: COMPUTE_PGM_RSRC2:TGID_Y_EN: 0
 ; GCN: COMPUTE_PGM_RSRC2:TGID_Z_EN: 1
 ; GCN: COMPUTE_PGM_RSRC2:TIDIG_COMP_CNT: 0
-define void @tgid_z_legacy(i32 addrspace(1)* %out) {
+define amdgpu_kernel void @tgid_z_legacy(i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.tgid.z() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -209,7 +194,7 @@ entry:
 
 ; FUNC-LABEL: {{^}}tidig_x_legacy:
 ; GCN-NOHSA: buffer_store_dword v0
-define void @tidig_x_legacy(i32 addrspace(1)* %out) {
+define amdgpu_kernel void @tidig_x_legacy(i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.tidig.x() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -223,7 +208,7 @@ entry:
 ; FUNC-LABEL: {{^}}tidig_y_legacy:
 
 ; GCN-NOHSA: buffer_store_dword v1
-define void @tidig_y_legacy(i32 addrspace(1)* %out) {
+define amdgpu_kernel void @tidig_y_legacy(i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.tidig.y() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -236,7 +221,7 @@ entry:
 
 ; FUNC-LABEL: {{^}}tidig_z_legacy:
 ; GCN-NOHSA: buffer_store_dword v2
-define void @tidig_z_legacy(i32 addrspace(1)* %out) {
+define amdgpu_kernel void @tidig_z_legacy(i32 addrspace(1)* %out) {
 entry:
   %0 = call i32 @llvm.r600.read.tidig.z() #0
   store i32 %0, i32 addrspace(1)* %out
@@ -262,7 +247,5 @@ declare i32 @llvm.r600.read.tgid.z() #0
 declare i32 @llvm.r600.read.tidig.x() #0
 declare i32 @llvm.r600.read.tidig.y() #0
 declare i32 @llvm.r600.read.tidig.z() #0
-
-declare i32 @llvm.AMDGPU.read.workdim() #0
 
 attributes #0 = { readnone }

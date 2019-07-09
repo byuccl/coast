@@ -1,4 +1,4 @@
-; RUN: llc -O3 -mtriple arm64-apple-ios3 -aarch64-gep-opt=false %s -o - | FileCheck %s
+; RUN: llc -O3 -mtriple arm64-apple-ios3 -aarch64-enable-gep-opt=false %s -o - | FileCheck %s
 ; <rdar://problem/13621857>
 
 @block = common global i8* null, align 8
@@ -8,7 +8,7 @@ define i32 @fct(i32 %i1, i32 %i2) {
 ; Sign extension is used more than once, thus it should not be folded.
 ; CodeGenPrepare is not sharing sext across uses, thus this is folded because
 ; of that.
-; _CHECK-NOT_: , sxtw]
+; _CHECK-NOT: , sxtw]
 entry:
   %idxprom = sext i32 %i1 to i64
   %0 = load i8*, i8** @block, align 8

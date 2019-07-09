@@ -1,4 +1,4 @@
-; RUN: llc < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s | FileCheck %s
 target datalayout = "E-m:e-p:32:32-i64:64-n32"
 target triple = "powerpc-unknown-linux-gnu"
 
@@ -7,7 +7,7 @@ target triple = "powerpc-unknown-linux-gnu"
 
 define i8* @nest_receiver(i8* nest %arg) nounwind {
 ; CHECK-LABEL: nest_receiver:
-; CHECK: # BB#0:
+; CHECK: # %bb.0:
 ; CHECK-NEXT: mr 3, 11
 ; CHECK-NEXT: blr
 

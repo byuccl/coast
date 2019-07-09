@@ -30,8 +30,8 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Target/TargetInstrInfo.h"
 using namespace llvm;
 
 #define GET_INSTRMAP_INFO
@@ -61,7 +61,7 @@ public:
     initializeLanaiMemAluCombinerPass(*PassRegistry::getPassRegistry());
   }
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "Lanai load / store optimization pass";
   }
 
@@ -69,7 +69,7 @@ public:
 
   MachineFunctionProperties getRequiredProperties() const override {
     return MachineFunctionProperties().set(
-        MachineFunctionProperties::Property::AllVRegsAllocated);
+        MachineFunctionProperties::Property::NoVRegs);
   }
 
 private:
@@ -339,8 +339,11 @@ MbbIterator LanaiMemAluCombiner::findClosestSuitableAluInstr(
   while (First != Last) {
     Decrement ? --First : ++First;
 
+    if (First == Last)
+      break;
+
     // Skip over debug instructions
-    if (First->isDebugValue())
+    if (First->isDebugInstr())
       continue;
 
     if (isSuitableAluInstr(IsSpls, First, *Base, *Offset)) {

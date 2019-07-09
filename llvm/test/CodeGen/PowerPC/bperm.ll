@@ -1,4 +1,4 @@
-; RUN: llc -mcpu=pwr7 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mcpu=pwr7 < %s | FileCheck %s
 target datalayout = "E-m:e-i64:64-n32:64"
 target triple = "powerpc64-unknown-linux-gnu"
 
@@ -268,6 +268,18 @@ entry:
 
 ; CHECK-LABEL: @test15
 ; CHECK: rlwimi 3, 3, 4, 24, 31
+; CHECK: blr
+}
+
+define i64 @test16(i64 %a, i64 %b) #0 {
+entry:
+  %and = and i64 %a, 4294967295
+  %shl = shl i64 %b, 32
+  %or = or i64 %and, %shl
+  ret i64 %or
+
+; CHECK-LABEL: @test16
+; CHECK: rldimi 3, 4, 32, 0
 ; CHECK: blr
 }
 

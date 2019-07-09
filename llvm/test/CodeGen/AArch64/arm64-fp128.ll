@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=arm64-linux-gnu -verify-machineinstrs -mcpu=cyclone -aarch64-atomic-cfg-tidy=0 < %s | FileCheck %s
+; RUN: llc -mtriple=arm64-linux-gnu -verify-machineinstrs -mcpu=cyclone -aarch64-enable-atomic-cfg-tidy=0 < %s | FileCheck -enable-var-scope %s
 
 @lhs = global fp128 zeroinitializer, align 16
 @rhs = global fp128 zeroinitializer, align 16
@@ -156,6 +156,28 @@ define i1 @test_setcc2() {
 ; CHECK: ret
 }
 
+define i1 @test_setcc3() {
+; CHECK-LABEL: test_setcc3:
+
+  %lhs = load fp128, fp128* @lhs, align 16
+  %rhs = load fp128, fp128* @rhs, align 16
+; CHECK: ldr q0, [{{x[0-9]+}}, :lo12:lhs]
+; CHECK: ldr q1, [{{x[0-9]+}}, :lo12:rhs]
+
+  %val = fcmp ueq fp128 %lhs, %rhs
+; CHECK: bl __eqtf2
+; CHECK: cmp     w0, #0
+; CHECK: cset    w19, eq
+; CHECK: bl __unordtf2
+; CHECK: cmp     w0, #0
+; CHECK: cset    w8, ne
+; CHECK: orr     w0, w8, w19
+
+  ret i1 %val
+; CHECK: ret
+}
+
+
 define i32 @test_br_cc() {
 ; CHECK-LABEL: test_br_cc:
 
@@ -173,7 +195,7 @@ define i32 @test_br_cc() {
 
 iftrue:
   ret i32 42
-; CHECK-NEXT: BB#
+; CHECK-NEXT: %bb.
 ; CHECK-NEXT: mov w0, #42
 ; CHECK: ret
 iffalse:
@@ -189,7 +211,7 @@ define void @test_select(i1 %cond, fp128 %lhs, fp128 %rhs) {
   store fp128 %val, fp128* @lhs, align 16
 ; CHECK: tst w0, #0x1
 ; CHECK-NEXT: b.eq [[IFFALSE:.LBB[0-9]+_[0-9]+]]
-; CHECK-NEXT: BB#
+; CHECK-NEXT: %bb.
 ; CHECK-NEXT: mov v[[VAL:[0-9]+]].16b, v0.16b
 ; CHECK-NEXT: [[IFFALSE]]:
 ; CHECK: str q[[VAL]], [{{x[0-9]+}}, :lo12:lhs]
@@ -240,7 +262,7 @@ define void @test_extend() {
 }
 
 define fp128 @test_neg(fp128 %in) {
-; CHECK: [[MINUS0:.LCPI[0-9]+_0]]:
+; CHECK: [[$MINUS0:.LCPI[0-9]+_0]]:
 ; Make sure the weird hex constant below *is* -0.0
 ; CHECK-NEXT: fp128 -0
 
@@ -250,7 +272,7 @@ define fp128 @test_neg(fp128 %in) {
   ; sure that doesn't happen.
   %ret = fsub fp128 0xL00000000000000008000000000000000, %in
 ; CHECK: mov v1.16b, v0.16b
-; CHECK: ldr q0, [{{x[0-9]+}}, :lo12:[[MINUS0]]]
+; CHECK: ldr q0, [{{x[0-9]+}}, :lo12:[[$MINUS0]]]
 ; CHECK: bl __subtf3
 
   ret fp128 %ret

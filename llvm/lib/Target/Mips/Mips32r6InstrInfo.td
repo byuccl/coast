@@ -13,6 +13,24 @@
 
 include "Mips32r6InstrFormats.td"
 
+//===----------------------------------------------------------------------===//
+//
+// Mips profiles and nodes
+//
+//===----------------------------------------------------------------------===//
+
+def SDT_MipsFSelect : SDTypeProfile<1, 3, [SDTCisFP<1>,
+                                           SDTCisSameAs<0,2>,
+                                           SDTCisSameAs<2,3>]>;
+
+def MipsFSelect : SDNode<"MipsISD::FSELECT", SDT_MipsFSelect>;
+
+//===----------------------------------------------------------------------===//
+//
+// Mips Operands
+//
+//===----------------------------------------------------------------------===//
+
 // Notes about removals/changes from MIPS32r6:
 // Reencoded: jr -> jalr
 // Reencoded: jr.hb -> jalr.hb
@@ -98,6 +116,9 @@ class BC1NEZ_ENC : COP1_BCCZ_FM<OPCODE5_BC1NEZ>;
 class BC2EQZ_ENC : COP2_BCCZ_FM<OPCODE5_BC2EQZ>;
 class BC2NEZ_ENC : COP2_BCCZ_FM<OPCODE5_BC2NEZ>;
 
+class DVP_ENC : COP0_EVP_DVP_FM<0b1>;
+class EVP_ENC : COP0_EVP_DVP_FM<0b0>;
+
 class JIALC_ENC : JMP_IDX_COMPACT_FM<0b111110>;
 class JIC_ENC   : JMP_IDX_COMPACT_FM<0b110110>;
 class JR_HB_R6_ENC : JR_HB_R6_FM<OPCODE6_JALR>;
@@ -169,6 +190,16 @@ class CLZ_R6_ENC : SPECIAL_2R_FM<OPCODE6_CLZ>;
 
 class SDBBP_R6_ENC : SPECIAL_SDBBP_FM;
 
+class CRC32B_ENC  : SPECIAL3_2R_SZ_CRC<0,0>;
+class CRC32H_ENC  : SPECIAL3_2R_SZ_CRC<1,0>;
+class CRC32W_ENC  : SPECIAL3_2R_SZ_CRC<2,0>;
+class CRC32CB_ENC : SPECIAL3_2R_SZ_CRC<0,1>;
+class CRC32CH_ENC : SPECIAL3_2R_SZ_CRC<1,1>;
+class CRC32CW_ENC : SPECIAL3_2R_SZ_CRC<2,1>;
+
+class GINVI_ENC : SPECIAL3_GINV<0>;
+class GINVT_ENC : SPECIAL3_GINV<2>;
+
 //===----------------------------------------------------------------------===//
 //
 // Instruction Multiclasses
@@ -177,90 +208,98 @@ class SDBBP_R6_ENC : SPECIAL_SDBBP_FM;
 
 class CMP_CONDN_DESC_BASE<string CondStr, string Typestr,
                           RegisterOperand FGROpnd,
+                          InstrItinClass Itin,
                           SDPatternOperator Op = null_frag> {
   dag OutOperandList = (outs FGRCCOpnd:$fd);
   dag InOperandList = (ins FGROpnd:$fs, FGROpnd:$ft);
   string AsmString = !strconcat("cmp.", CondStr, ".", Typestr, "\t$fd, $fs, $ft");
   list<dag> Pattern = [(set FGRCCOpnd:$fd, (Op FGROpnd:$fs, FGROpnd:$ft))];
   bit isCTI = 1;
+  InstrItinClass Itinerary = Itin;
 }
 
 multiclass CMP_CC_M <FIELD_CMP_FORMAT Format, string Typestr,
-                     RegisterOperand FGROpnd>{
+                     RegisterOperand FGROpnd, InstrItinClass Itin>{
   let AdditionalPredicates = [NotInMicroMips] in {
     def CMP_F_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format, FIELD_CMP_COND_AF>,
-                      CMP_CONDN_DESC_BASE<"af", Typestr, FGROpnd>,
+                      CMP_CONDN_DESC_BASE<"af", Typestr, FGROpnd, Itin>,
                       MipsR6Arch<!strconcat("cmp.af.", Typestr)>,
                       ISA_MIPS32R6, HARDFLOAT;
     def CMP_UN_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format, FIELD_CMP_COND_UN>,
-                       CMP_CONDN_DESC_BASE<"un", Typestr, FGROpnd, setuo>,
+                       CMP_CONDN_DESC_BASE<"un", Typestr, FGROpnd, Itin, setuo>,
                        MipsR6Arch<!strconcat("cmp.un.", Typestr)>,
                        ISA_MIPS32R6, HARDFLOAT;
     def CMP_EQ_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format, FIELD_CMP_COND_EQ>,
-                       CMP_CONDN_DESC_BASE<"eq", Typestr, FGROpnd, setoeq>,
+                       CMP_CONDN_DESC_BASE<"eq", Typestr, FGROpnd, Itin,
+                                           setoeq>,
                        MipsR6Arch<!strconcat("cmp.eq.", Typestr)>,
                        ISA_MIPS32R6, HARDFLOAT;
     def CMP_UEQ_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_UEQ>,
-                        CMP_CONDN_DESC_BASE<"ueq", Typestr, FGROpnd, setueq>,
+                        CMP_CONDN_DESC_BASE<"ueq", Typestr, FGROpnd, Itin,
+                                            setueq>,
                         MipsR6Arch<!strconcat("cmp.ueq.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_LT_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format, FIELD_CMP_COND_LT>,
-                       CMP_CONDN_DESC_BASE<"lt", Typestr, FGROpnd, setolt>,
+                       CMP_CONDN_DESC_BASE<"lt", Typestr, FGROpnd, Itin,
+                                           setolt>,
                        MipsR6Arch<!strconcat("cmp.lt.", Typestr)>,
                        ISA_MIPS32R6, HARDFLOAT;
     def CMP_ULT_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_ULT>,
-                        CMP_CONDN_DESC_BASE<"ult", Typestr, FGROpnd, setult>,
+                        CMP_CONDN_DESC_BASE<"ult", Typestr, FGROpnd, Itin,
+                                            setult>,
                         MipsR6Arch<!strconcat("cmp.ult.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_LE_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format, FIELD_CMP_COND_LE>,
-                       CMP_CONDN_DESC_BASE<"le", Typestr, FGROpnd, setole>,
+                       CMP_CONDN_DESC_BASE<"le", Typestr, FGROpnd, Itin,
+                                           setole>,
                        MipsR6Arch<!strconcat("cmp.le.", Typestr)>,
                        ISA_MIPS32R6, HARDFLOAT;
     def CMP_ULE_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_ULE>,
-                        CMP_CONDN_DESC_BASE<"ule", Typestr, FGROpnd, setule>,
+                        CMP_CONDN_DESC_BASE<"ule", Typestr, FGROpnd, Itin,
+                                            setule>,
                         MipsR6Arch<!strconcat("cmp.ule.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_SAF_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_SAF>,
-                        CMP_CONDN_DESC_BASE<"saf", Typestr, FGROpnd>,
+                        CMP_CONDN_DESC_BASE<"saf", Typestr, FGROpnd, Itin>,
                         MipsR6Arch<!strconcat("cmp.saf.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_SUN_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_SUN>,
-                        CMP_CONDN_DESC_BASE<"sun", Typestr, FGROpnd>,
+                        CMP_CONDN_DESC_BASE<"sun", Typestr, FGROpnd, Itin>,
                         MipsR6Arch<!strconcat("cmp.sun.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_SEQ_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_SEQ>,
-                        CMP_CONDN_DESC_BASE<"seq", Typestr, FGROpnd>,
+                        CMP_CONDN_DESC_BASE<"seq", Typestr, FGROpnd, Itin>,
                         MipsR6Arch<!strconcat("cmp.seq.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_SUEQ_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                       FIELD_CMP_COND_SUEQ>,
-                         CMP_CONDN_DESC_BASE<"sueq", Typestr, FGROpnd>,
+                         CMP_CONDN_DESC_BASE<"sueq", Typestr, FGROpnd, Itin>,
                          MipsR6Arch<!strconcat("cmp.sueq.", Typestr)>,
                          ISA_MIPS32R6, HARDFLOAT;
     def CMP_SLT_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_SLT>,
-                        CMP_CONDN_DESC_BASE<"slt", Typestr, FGROpnd>,
+                        CMP_CONDN_DESC_BASE<"slt", Typestr, FGROpnd, Itin>,
                         MipsR6Arch<!strconcat("cmp.slt.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_SULT_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                       FIELD_CMP_COND_SULT>,
-                         CMP_CONDN_DESC_BASE<"sult", Typestr, FGROpnd>,
+                         CMP_CONDN_DESC_BASE<"sult", Typestr, FGROpnd, Itin>,
                          MipsR6Arch<!strconcat("cmp.sult.", Typestr)>,
                          ISA_MIPS32R6, HARDFLOAT;
     def CMP_SLE_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                      FIELD_CMP_COND_SLE>,
-                        CMP_CONDN_DESC_BASE<"sle", Typestr, FGROpnd>,
+                        CMP_CONDN_DESC_BASE<"sle", Typestr, FGROpnd, Itin>,
                         MipsR6Arch<!strconcat("cmp.sle.", Typestr)>,
                         ISA_MIPS32R6, HARDFLOAT;
     def CMP_SULE_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format,
                                                       FIELD_CMP_COND_SULE>,
-                         CMP_CONDN_DESC_BASE<"sule", Typestr, FGROpnd>,
+                         CMP_CONDN_DESC_BASE<"sule", Typestr, FGROpnd, Itin>,
                          MipsR6Arch<!strconcat("cmp.sule.", Typestr)>,
                          ISA_MIPS32R6, HARDFLOAT;
   }
@@ -315,9 +354,9 @@ class AUIPC_DESC : ALUIPC_DESC_BASE<"auipc", GPR32Opnd, II_AUIPC>;
 class AUI_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
                     InstrItinClass itin = NoItinerary>
       : MipsR6Arch<instr_asm> {
-  dag OutOperandList = (outs GPROpnd:$rs);
-  dag InOperandList = (ins GPROpnd:$rt, simm16:$imm);
-  string AsmString = !strconcat(instr_asm, "\t$rs, $rt, $imm");
+  dag OutOperandList = (outs GPROpnd:$rt);
+  dag InOperandList = (ins GPROpnd:$rs, uimm16:$imm);
+  string AsmString = !strconcat(instr_asm, "\t$rt, $rs, $imm");
   list<dag> Pattern = [];
   InstrItinClass Itinerary = itin;
 }
@@ -426,6 +465,7 @@ class COP2_BCCZ_DESC_BASE<string instr_asm> : BRANCH_DESC_BASE {
   string AsmString = instr_asm;
   bit hasDelaySlot = 1;
   bit isCTI = 1;
+  InstrItinClass Itinerary = II_BC2CCZ;
 }
 
 class BC2EQZ_DESC : COP2_BCCZ_DESC_BASE<"bc2eqz $ct, $offset">;
@@ -468,6 +508,7 @@ class JR_HB_R6_DESC : JR_HB_DESC_BASE<"jr.hb", GPR32Opnd> {
   bit isTerminator=1;
   bit isBarrier=1;
   bit isCTI = 1;
+  InstrItinClass Itinerary = II_JR_HB;
 }
 
 class BITSWAP_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
@@ -495,6 +536,19 @@ class DIVMOD_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
   // teq instructions as well.
   bit usesCustomInserter = 1;
 }
+
+class DVPEVP_DESC_BASE<string instr_asm, InstrItinClass Itin>
+    : MipsR6Arch<instr_asm> {
+  dag OutOperandList = (outs GPR32Opnd:$rt);
+  dag InOperandList = (ins);
+  string AsmString = !strconcat(instr_asm, "\t$rt");
+  list<dag> Pattern = [];
+  InstrItinClass Itinerary = Itin;
+  bit hasUnModeledSideEffects = 1;
+}
+
+class DVP_DESC : DVPEVP_DESC_BASE<"dvp", II_DVP>;
+class EVP_DESC : DVPEVP_DESC_BASE<"evp", II_EVP>;
 
 class DIV_DESC  : DIVMOD_DESC_BASE<"div", GPR32Opnd, II_DIV, sdiv>;
 class DIVU_DESC : DIVMOD_DESC_BASE<"divu", GPR32Opnd, II_DIVU, udiv>;
@@ -540,7 +594,8 @@ class MUHU_DESC   : MUL_R6_DESC_BASE<"muhu", GPR32Opnd, II_MUHU, mulhu>;
 class MUL_R6_DESC : MUL_R6_DESC_BASE<"mul", GPR32Opnd, II_MUL, mul>;
 class MULU_DESC   : MUL_R6_DESC_BASE<"mulu", GPR32Opnd, II_MULU>;
 
-class COP1_SEL_DESC_BASE<string instr_asm, RegisterOperand FGROpnd> {
+class COP1_SEL_DESC_BASE<string instr_asm, RegisterOperand FGROpnd,
+                         InstrItinClass itin> {
   dag OutOperandList = (outs FGROpnd:$fd);
   dag InOperandList = (ins FGRCCOpnd:$fd_in, FGROpnd:$fs, FGROpnd:$ft);
   string AsmString = !strconcat(instr_asm, "\t$fd, $fs, $ft");
@@ -548,13 +603,25 @@ class COP1_SEL_DESC_BASE<string instr_asm, RegisterOperand FGROpnd> {
                                                  FGROpnd:$ft,
                                                  FGROpnd:$fs))];
   string Constraints = "$fd_in = $fd";
+  InstrItinClass Itinerary = itin;
 }
 
-class SEL_D_DESC : COP1_SEL_DESC_BASE<"sel.d", FGR64Opnd>, MipsR6Arch<"sel.d"> {
-  // We must insert a SUBREG_TO_REG around $fd_in
-  bit usesCustomInserter = 1;
+class COP1_SEL_D_DESC_BASE<string instr_asm, RegisterOperand FGROpnd,
+                           InstrItinClass itin> {
+  dag OutOperandList = (outs FGROpnd:$fd);
+  dag InOperandList = (ins FGROpnd:$fd_in, FGROpnd:$fs, FGROpnd:$ft);
+  string AsmString = !strconcat(instr_asm, "\t$fd, $fs, $ft");
+  list<dag> Pattern = [(set FGROpnd:$fd, (MipsFSelect FGROpnd:$fd_in,
+                                                      FGROpnd:$ft,
+                                                      FGROpnd:$fs))];
+  string Constraints = "$fd_in = $fd";
+  InstrItinClass Itinerary = itin;
 }
-class SEL_S_DESC : COP1_SEL_DESC_BASE<"sel.s", FGR32Opnd>, MipsR6Arch<"sel.s">;
+
+class SEL_D_DESC : COP1_SEL_D_DESC_BASE<"sel.d", FGR64Opnd, II_SEL_D>,
+                   MipsR6Arch<"sel.d">;
+class SEL_S_DESC : COP1_SEL_DESC_BASE<"sel.s", FGR32Opnd, II_SEL_S>,
+                   MipsR6Arch<"sel.s">;
 
 class SELEQNE_Z_DESC_BASE<string instr_asm, RegisterOperand GPROpnd>
     : MipsR6Arch<instr_asm> {
@@ -583,86 +650,98 @@ class MADDF_D_DESC  : COP1_4R_DESC_BASE<"maddf.d", FGR64Opnd, II_MADDF_D>;
 class MSUBF_S_DESC  : COP1_4R_DESC_BASE<"msubf.s", FGR32Opnd, II_MSUBF_S>;
 class MSUBF_D_DESC  : COP1_4R_DESC_BASE<"msubf.d", FGR64Opnd, II_MSUBF_D>;
 
-class MAX_MIN_DESC_BASE<string instr_asm, RegisterOperand FGROpnd> {
+class MAX_MIN_DESC_BASE<string instr_asm, RegisterOperand FGROpnd,
+                        InstrItinClass itin> {
   dag OutOperandList = (outs FGROpnd:$fd);
   dag InOperandList = (ins FGROpnd:$fs, FGROpnd:$ft);
   string AsmString = !strconcat(instr_asm, "\t$fd, $fs, $ft");
   list<dag> Pattern = [];
+  InstrItinClass Itinerary = itin;
 }
 
-class MAX_S_DESC : MAX_MIN_DESC_BASE<"max.s", FGR32Opnd>;
-class MAX_D_DESC : MAX_MIN_DESC_BASE<"max.d", FGR64Opnd>;
-class MIN_S_DESC : MAX_MIN_DESC_BASE<"min.s", FGR32Opnd>;
-class MIN_D_DESC : MAX_MIN_DESC_BASE<"min.d", FGR64Opnd>;
+class MAX_S_DESC : MAX_MIN_DESC_BASE<"max.s", FGR32Opnd, II_MAX_S>;
+class MAX_D_DESC : MAX_MIN_DESC_BASE<"max.d", FGR64Opnd, II_MAX_D>;
+class MIN_S_DESC : MAX_MIN_DESC_BASE<"min.s", FGR32Opnd, II_MIN_S>;
+class MIN_D_DESC : MAX_MIN_DESC_BASE<"min.d", FGR64Opnd, II_MIN_D>;
 
-class MAXA_S_DESC : MAX_MIN_DESC_BASE<"maxa.s", FGR32Opnd>;
-class MAXA_D_DESC : MAX_MIN_DESC_BASE<"maxa.d", FGR64Opnd>;
-class MINA_S_DESC : MAX_MIN_DESC_BASE<"mina.s", FGR32Opnd>;
-class MINA_D_DESC : MAX_MIN_DESC_BASE<"mina.d", FGR64Opnd>;
+class MAXA_S_DESC : MAX_MIN_DESC_BASE<"maxa.s", FGR32Opnd, II_MAX_S>;
+class MAXA_D_DESC : MAX_MIN_DESC_BASE<"maxa.d", FGR64Opnd, II_MAX_D>;
+class MINA_S_DESC : MAX_MIN_DESC_BASE<"mina.s", FGR32Opnd, II_MIN_D>;
+class MINA_D_DESC : MAX_MIN_DESC_BASE<"mina.d", FGR64Opnd, II_MIN_S>;
 
-class SELEQNEZ_DESC_BASE<string instr_asm, RegisterOperand FGROpnd> {
+class SELEQNEZ_DESC_BASE<string instr_asm, RegisterOperand FGROpnd,
+                         InstrItinClass itin> {
   dag OutOperandList = (outs FGROpnd:$fd);
   dag InOperandList = (ins FGROpnd:$fs, FGROpnd:$ft);
   string AsmString = !strconcat(instr_asm, "\t$fd, $fs, $ft");
   list<dag> Pattern = [];
+  InstrItinClass Itinerary = itin;
 }
 
-class SELEQZ_S_DESC : SELEQNEZ_DESC_BASE<"seleqz.s", FGR32Opnd>,
+class SELEQZ_S_DESC : SELEQNEZ_DESC_BASE<"seleqz.s", FGR32Opnd, II_SELCCZ_S>,
                       MipsR6Arch<"seleqz.s">;
-class SELEQZ_D_DESC : SELEQNEZ_DESC_BASE<"seleqz.d", FGR64Opnd>,
+class SELEQZ_D_DESC : SELEQNEZ_DESC_BASE<"seleqz.d", FGR64Opnd, II_SELCCZ_D>,
                       MipsR6Arch<"seleqz.d">;
-class SELNEZ_S_DESC : SELEQNEZ_DESC_BASE<"selnez.s", FGR32Opnd>,
+class SELNEZ_S_DESC : SELEQNEZ_DESC_BASE<"selnez.s", FGR32Opnd, II_SELCCZ_S>,
                       MipsR6Arch<"selnez.s">;
-class SELNEZ_D_DESC : SELEQNEZ_DESC_BASE<"selnez.d", FGR64Opnd>,
+class SELNEZ_D_DESC : SELEQNEZ_DESC_BASE<"selnez.d", FGR64Opnd, II_SELCCZ_D>,
                       MipsR6Arch<"selnez.d">;
 
-class CLASS_RINT_DESC_BASE<string instr_asm, RegisterOperand FGROpnd> {
+class CLASS_RINT_DESC_BASE<string instr_asm, RegisterOperand FGROpnd,
+                           InstrItinClass itin> {
   dag OutOperandList = (outs FGROpnd:$fd);
   dag InOperandList = (ins FGROpnd:$fs);
   string AsmString = !strconcat(instr_asm, "\t$fd, $fs");
   list<dag> Pattern = [];
+  InstrItinClass Itinerary = itin;
 }
 
-class RINT_S_DESC : CLASS_RINT_DESC_BASE<"rint.s", FGR32Opnd>;
-class RINT_D_DESC : CLASS_RINT_DESC_BASE<"rint.d", FGR64Opnd>;
-class CLASS_S_DESC : CLASS_RINT_DESC_BASE<"class.s", FGR32Opnd>;
-class CLASS_D_DESC : CLASS_RINT_DESC_BASE<"class.d", FGR64Opnd>;
+class RINT_S_DESC : CLASS_RINT_DESC_BASE<"rint.s", FGR32Opnd, II_RINT_S>;
+class RINT_D_DESC : CLASS_RINT_DESC_BASE<"rint.d", FGR64Opnd, II_RINT_D>;
+class CLASS_S_DESC : CLASS_RINT_DESC_BASE<"class.s", FGR32Opnd, II_CLASS_S>;
+class CLASS_D_DESC : CLASS_RINT_DESC_BASE<"class.d", FGR64Opnd, II_CLASS_D>;
 
 class CACHE_HINT_DESC<string instr_asm, Operand MemOpnd,
-                      RegisterOperand GPROpnd> : MipsR6Arch<instr_asm> {
+                      RegisterOperand GPROpnd, InstrItinClass itin>
+                     : MipsR6Arch<instr_asm> {
   dag OutOperandList = (outs);
   dag InOperandList = (ins MemOpnd:$addr, uimm5:$hint);
   string AsmString = !strconcat(instr_asm, "\t$hint, $addr");
   list<dag> Pattern = [];
   string DecoderMethod = "DecodeCacheeOp_CacheOpR6";
+  InstrItinClass Itinerary = itin;
 }
 
-class CACHE_DESC : CACHE_HINT_DESC<"cache", mem_simm9, GPR32Opnd>;
-class PREF_DESC : CACHE_HINT_DESC<"pref", mem_simm9, GPR32Opnd>;
+class CACHE_DESC : CACHE_HINT_DESC<"cache", mem_simm9, GPR32Opnd, II_CACHE>;
+class PREF_DESC : CACHE_HINT_DESC<"pref", mem_simm9, GPR32Opnd, II_PREF>;
 
-class COP2LD_DESC_BASE<string instr_asm, RegisterOperand COPOpnd> {
+class COP2LD_DESC_BASE<string instr_asm, RegisterOperand COPOpnd,
+                       InstrItinClass itin> {
   dag OutOperandList = (outs COPOpnd:$rt);
   dag InOperandList = (ins mem_simm11:$addr);
   string AsmString = !strconcat(instr_asm, "\t$rt, $addr");
   list<dag> Pattern = [];
   bit mayLoad = 1;
   string DecoderMethod = "DecodeFMemCop2R6";
+  InstrItinClass Itinerary = itin;
 }
 
-class LDC2_R6_DESC : COP2LD_DESC_BASE<"ldc2", COP2Opnd>;
-class LWC2_R6_DESC : COP2LD_DESC_BASE<"lwc2", COP2Opnd>;
+class LDC2_R6_DESC : COP2LD_DESC_BASE<"ldc2", COP2Opnd, II_LDC2>;
+class LWC2_R6_DESC : COP2LD_DESC_BASE<"lwc2", COP2Opnd, II_LWC2>;
 
-class COP2ST_DESC_BASE<string instr_asm, RegisterOperand COPOpnd> {
+class COP2ST_DESC_BASE<string instr_asm, RegisterOperand COPOpnd,
+                       InstrItinClass itin> {
   dag OutOperandList = (outs);
   dag InOperandList = (ins COPOpnd:$rt, mem_simm11:$addr);
   string AsmString = !strconcat(instr_asm, "\t$rt, $addr");
   list<dag> Pattern = [];
   bit mayStore = 1;
   string DecoderMethod = "DecodeFMemCop2R6";
+  InstrItinClass Itinerary = itin;
 }
 
-class SDC2_R6_DESC : COP2ST_DESC_BASE<"sdc2", COP2Opnd>;
-class SWC2_R6_DESC : COP2ST_DESC_BASE<"swc2", COP2Opnd>;
+class SDC2_R6_DESC : COP2ST_DESC_BASE<"sdc2", COP2Opnd, II_SDC2>;
+class SWC2_R6_DESC : COP2ST_DESC_BASE<"swc2", COP2Opnd, II_SWC2>;
 
 class LSA_R6_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
                        Operand ImmOpnd, InstrItinClass itin>
@@ -732,7 +811,40 @@ class SDBBP_R6_DESC {
   string AsmString = "sdbbp\t$code_";
   list<dag> Pattern = [];
   bit isCTI = 1;
+  InstrItinClass Itinerary = II_SDBBP;
 }
+
+class CRC_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
+                    InstrItinClass itin> : MipsR6Arch<instr_asm> {
+  dag OutOperandList = (outs GPROpnd:$rd);
+  dag InOperandList = (ins GPROpnd:$rs, GPROpnd:$rt);
+  string AsmString = !strconcat(instr_asm, "\t$rd, $rs, $rt");
+  list<dag> Pattern = [];
+  InstrItinClass Itinerary = itin;
+}
+
+class CRC32B_DESC : CRC_DESC_BASE<"crc32b", GPR32Opnd, II_CRC32B>;
+class CRC32H_DESC : CRC_DESC_BASE<"crc32h", GPR32Opnd, II_CRC32H>;
+class CRC32W_DESC : CRC_DESC_BASE<"crc32w", GPR32Opnd, II_CRC32W>;
+class CRC32CB_DESC : CRC_DESC_BASE<"crc32cb", GPR32Opnd, II_CRC32CB>;
+class CRC32CH_DESC : CRC_DESC_BASE<"crc32ch", GPR32Opnd, II_CRC32CH>;
+class CRC32CW_DESC : CRC_DESC_BASE<"crc32cw", GPR32Opnd, II_CRC32CW>;
+
+class GINV_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
+                     InstrItinClass itin> : MipsR6Arch<instr_asm> {
+  dag OutOperandList = (outs);
+  dag InOperandList = (ins GPROpnd:$rs, uimm2:$type_);
+  string AsmString = !strconcat(instr_asm, "\t$rs, $type_");
+  list<dag> Pattern = [];
+  InstrItinClass Itinerary = itin;
+  bit hasSideEffects = 1;
+}
+
+class GINVI_DESC : GINV_DESC_BASE<"ginvi", GPR32Opnd, II_GINVI> {
+  dag InOperandList = (ins GPR32Opnd:$rs);
+  string AsmString = "ginvi\t$rs";
+}
+class GINVT_DESC : GINV_DESC_BASE<"ginvt", GPR32Opnd, II_GINVT>;
 
 //===----------------------------------------------------------------------===//
 //
@@ -752,44 +864,46 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def BC1NEZ : BC1NEZ_ENC, BC1NEZ_DESC, ISA_MIPS32R6, HARDFLOAT;
   def BC2EQZ : BC2EQZ_ENC, BC2EQZ_DESC, ISA_MIPS32R6;
   def BC2NEZ : BC2NEZ_ENC, BC2NEZ_DESC, ISA_MIPS32R6;
+  def BC : R6MMR6Rel, BC_ENC, BC_DESC, ISA_MIPS32R6;
+  def BEQC : R6MMR6Rel, BEQC_ENC, BEQC_DESC, ISA_MIPS32R6;
+  def BEQZALC : R6MMR6Rel, BEQZALC_ENC, BEQZALC_DESC, ISA_MIPS32R6;
+  def BEQZC : R6MMR6Rel, BEQZC_ENC, BEQZC_DESC, ISA_MIPS32R6;
+  def BGEC : R6MMR6Rel, BGEC_ENC, BGEC_DESC, ISA_MIPS32R6;
+  def BGEUC : R6MMR6Rel, BGEUC_ENC, BGEUC_DESC, ISA_MIPS32R6;
+  def BGEZALC : R6MMR6Rel, BGEZALC_ENC, BGEZALC_DESC, ISA_MIPS32R6;
+  def BGEZC : R6MMR6Rel, BGEZC_ENC, BGEZC_DESC, ISA_MIPS32R6;
+  def BGTZALC : R6MMR6Rel, BGTZALC_ENC, BGTZALC_DESC, ISA_MIPS32R6;
+  def BGTZC : R6MMR6Rel, BGTZC_ENC, BGTZC_DESC, ISA_MIPS32R6;
 }
-def BC : R6MMR6Rel, BC_ENC, BC_DESC, ISA_MIPS32R6;
-def BEQC : R6MMR6Rel, BEQC_ENC, BEQC_DESC, ISA_MIPS32R6;
-def BEQZALC : R6MMR6Rel, BEQZALC_ENC, BEQZALC_DESC, ISA_MIPS32R6;
-def BEQZC : R6MMR6Rel, BEQZC_ENC, BEQZC_DESC, ISA_MIPS32R6;
-def BGEC : R6MMR6Rel, BGEC_ENC, BGEC_DESC, ISA_MIPS32R6;
-def BGEUC : R6MMR6Rel, BGEUC_ENC, BGEUC_DESC, ISA_MIPS32R6;
-def BGEZALC : R6MMR6Rel, BGEZALC_ENC, BGEZALC_DESC, ISA_MIPS32R6;
-def BGEZC : BGEZC_ENC, BGEZC_DESC, ISA_MIPS32R6;
-def BGTZALC : R6MMR6Rel, BGTZALC_ENC, BGTZALC_DESC, ISA_MIPS32R6;
-def BGTZC : BGTZC_ENC, BGTZC_DESC, ISA_MIPS32R6;
 def BITSWAP : R6MMR6Rel, BITSWAP_ENC, BITSWAP_DESC, ISA_MIPS32R6;
-def BLEZALC : R6MMR6Rel, BLEZALC_ENC, BLEZALC_DESC, ISA_MIPS32R6;
-def BLEZC : BLEZC_ENC, BLEZC_DESC, ISA_MIPS32R6;
-def BLTC : R6MMR6Rel, BLTC_ENC, BLTC_DESC, ISA_MIPS32R6;
-def BLTUC : R6MMR6Rel, BLTUC_ENC, BLTUC_DESC, ISA_MIPS32R6;
-def BLTZALC : R6MMR6Rel, BLTZALC_ENC, BLTZALC_DESC, ISA_MIPS32R6;
-def BLTZC : BLTZC_ENC, BLTZC_DESC, ISA_MIPS32R6;
-def BNEC : R6MMR6Rel, BNEC_ENC, BNEC_DESC, ISA_MIPS32R6;
-def BNEZALC : R6MMR6Rel, BNEZALC_ENC, BNEZALC_DESC, ISA_MIPS32R6;
-def BNEZC : R6MMR6Rel, BNEZC_ENC, BNEZC_DESC, ISA_MIPS32R6;
 let AdditionalPredicates = [NotInMicroMips] in {
+  def BLEZALC : R6MMR6Rel, BLEZALC_ENC, BLEZALC_DESC, ISA_MIPS32R6;
+  def BLEZC : R6MMR6Rel, BLEZC_ENC, BLEZC_DESC, ISA_MIPS32R6;
+  def BLTC : R6MMR6Rel, BLTC_ENC, BLTC_DESC, ISA_MIPS32R6;
+  def BLTUC : R6MMR6Rel, BLTUC_ENC, BLTUC_DESC, ISA_MIPS32R6;
+  def BLTZALC : R6MMR6Rel, BLTZALC_ENC, BLTZALC_DESC, ISA_MIPS32R6;
+  def BLTZC : R6MMR6Rel, BLTZC_ENC, BLTZC_DESC, ISA_MIPS32R6;
+  def BNEC : R6MMR6Rel, BNEC_ENC, BNEC_DESC, ISA_MIPS32R6;
+  def BNEZALC : R6MMR6Rel, BNEZALC_ENC, BNEZALC_DESC, ISA_MIPS32R6;
+  def BNEZC : R6MMR6Rel, BNEZC_ENC, BNEZC_DESC, ISA_MIPS32R6;
   def BNVC : R6MMR6Rel, BNVC_ENC, BNVC_DESC, ISA_MIPS32R6;
   def BOVC : R6MMR6Rel, BOVC_ENC, BOVC_DESC, ISA_MIPS32R6;
-}
-def CACHE_R6 : R6MMR6Rel, CACHE_ENC, CACHE_DESC, ISA_MIPS32R6;
-let AdditionalPredicates = [NotInMicroMips] in {
+  def CACHE_R6 : R6MMR6Rel, CACHE_ENC, CACHE_DESC, ISA_MIPS32R6;
   def CLASS_D : CLASS_D_ENC, CLASS_D_DESC, ISA_MIPS32R6, HARDFLOAT;
   def CLASS_S : CLASS_S_ENC, CLASS_S_DESC, ISA_MIPS32R6, HARDFLOAT;
 }
 def CLO_R6 : R6MMR6Rel, CLO_R6_ENC, CLO_R6_DESC, ISA_MIPS32R6;
 def CLZ_R6 : R6MMR6Rel, CLZ_R6_ENC, CLZ_R6_DESC, ISA_MIPS32R6;
-defm S : CMP_CC_M<FIELD_CMP_FORMAT_S, "s", FGR32Opnd>;
-defm D : CMP_CC_M<FIELD_CMP_FORMAT_D, "d", FGR64Opnd>;
+defm S : CMP_CC_M<FIELD_CMP_FORMAT_S, "s", FGR32Opnd, II_CMP_CC_S>;
+defm D : CMP_CC_M<FIELD_CMP_FORMAT_D, "d", FGR64Opnd, II_CMP_CC_D>;
 let AdditionalPredicates = [NotInMicroMips] in {
   def DIV : R6MMR6Rel, DIV_ENC, DIV_DESC, ISA_MIPS32R6;
   def DIVU : R6MMR6Rel, DIVU_ENC, DIVU_DESC, ISA_MIPS32R6;
 }
+
+def DVP : R6MMR6Rel, DVP_ENC, DVP_DESC, ISA_MIPS32R6;
+def EVP : R6MMR6Rel, EVP_ENC, EVP_DESC, ISA_MIPS32R6;
+
 def JIALC : R6MMR6Rel, JIALC_ENC, JIALC_DESC, ISA_MIPS32R6;
 def JIC : R6MMR6Rel, JIC_ENC, JIC_DESC, ISA_MIPS32R6;
 def JR_HB_R6 : JR_HB_R6_ENC, JR_HB_R6_DESC, ISA_MIPS32R6;
@@ -802,8 +916,8 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def LWC2_R6 : LWC2_R6_ENC, LWC2_R6_DESC, ISA_MIPS32R6;
 }
 def LWPC : R6MMR6Rel, LWPC_ENC, LWPC_DESC, ISA_MIPS32R6;
-def LWUPC : LWUPC_ENC, LWUPC_DESC, ISA_MIPS32R6;
 let AdditionalPredicates = [NotInMicroMips] in {
+  def LWUPC : R6MMR6Rel, LWUPC_ENC, LWUPC_DESC, ISA_MIPS32R6;
   def MADDF_S : MADDF_S_ENC, MADDF_S_DESC, ISA_MIPS32R6, HARDFLOAT;
   def MADDF_D : MADDF_D_ENC, MADDF_D_DESC, ISA_MIPS32R6, HARDFLOAT;
   def MAXA_D : MAXA_D_ENC, MAXA_D_DESC, ISA_MIPS32R6, HARDFLOAT;
@@ -827,8 +941,8 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def MULU   : R6MMR6Rel, MULU_ENC, MULU_DESC, ISA_MIPS32R6;
 }
 def NAL; // BAL with rd=0
-def PREF_R6 : R6MMR6Rel, PREF_ENC, PREF_DESC, ISA_MIPS32R6;
 let AdditionalPredicates = [NotInMicroMips] in {
+  def PREF_R6 : R6MMR6Rel, PREF_ENC, PREF_DESC, ISA_MIPS32R6;
   def RINT_D : RINT_D_ENC, RINT_D_DESC, ISA_MIPS32R6, HARDFLOAT;
   def RINT_S : RINT_S_ENC, RINT_S_DESC, ISA_MIPS32R6, HARDFLOAT;
   def SC_R6 : SC_R6_ENC, SC_R6_DESC, PTR_32, ISA_MIPS32R6;
@@ -849,11 +963,28 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def SWC2_R6 : SWC2_R6_ENC, SWC2_R6_DESC, ISA_MIPS32R6;
 }
 
+let AdditionalPredicates = [NotInMicroMips] in {
+  def CRC32B : R6MMR6Rel, CRC32B_ENC, CRC32B_DESC, ISA_MIPS32R6, ASE_CRC;
+  def CRC32H : R6MMR6Rel, CRC32H_ENC, CRC32H_DESC, ISA_MIPS32R6, ASE_CRC;
+  def CRC32W : R6MMR6Rel, CRC32W_ENC, CRC32W_DESC, ISA_MIPS32R6, ASE_CRC;
+  def CRC32CB : R6MMR6Rel, CRC32CB_ENC, CRC32CB_DESC, ISA_MIPS32R6, ASE_CRC;
+  def CRC32CH : R6MMR6Rel, CRC32CH_ENC, CRC32CH_DESC, ISA_MIPS32R6, ASE_CRC;
+  def CRC32CW : R6MMR6Rel, CRC32CW_ENC, CRC32CW_DESC, ISA_MIPS32R6, ASE_CRC;
+}
+
+let AdditionalPredicates = [NotInMicroMips] in {
+  def GINVI : R6MMR6Rel, GINVI_ENC, GINVI_DESC, ISA_MIPS32R6, ASE_GINV;
+  def GINVT : R6MMR6Rel, GINVT_ENC, GINVT_DESC, ISA_MIPS32R6, ASE_GINV;
+}
+
 //===----------------------------------------------------------------------===//
 //
 // Instruction Aliases
 //
 //===----------------------------------------------------------------------===//
+
+def : MipsInstAlias<"dvp", (DVP ZERO), 0>, ISA_MIPS32R6;
+def : MipsInstAlias<"evp", (EVP ZERO), 0>, ISA_MIPS32R6;
 
 let AdditionalPredicates = [NotInMicroMips] in {
 def : MipsInstAlias<"sdbbp", (SDBBP_R6 0)>, ISA_MIPS32R6;
@@ -865,6 +996,15 @@ def : MipsInstAlias<"jrc $rs", (JIC GPR32Opnd:$rs, 0), 1>, ISA_MIPS32R6, GPR_32;
 let AdditionalPredicates = [NotInMicroMips] in {
 def : MipsInstAlias<"jalrc $rs", (JIALC GPR32Opnd:$rs, 0), 1>, ISA_MIPS32R6, GPR_32;
 }
+
+def : MipsInstAlias<"div $rs, $rt", (DIV GPR32Opnd:$rs, GPR32Opnd:$rs,
+                                         GPR32Opnd:$rt)>, ISA_MIPS32R6;
+def : MipsInstAlias<"divu $rs, $rt", (DIVU GPR32Opnd:$rs, GPR32Opnd:$rs,
+                                           GPR32Opnd:$rt)>, ISA_MIPS32R6;
+
+def : MipsInstAlias<"lapc $rd, $imm",
+                    (ADDIUPC GPR32Opnd:$rd, simm19_lsl2:$imm)>, ISA_MIPS32R6;
+
 //===----------------------------------------------------------------------===//
 //
 // Patterns and Pseudo Instructions
@@ -950,3 +1090,42 @@ def : MipsPat<(select i32:$cond, immz, i32:$f),
               (SELEQZ i32:$f, i32:$cond)>,
               ISA_MIPS32R6;
 }
+
+// Pseudo instructions
+let isCall = 1, isTerminator = 1, isReturn = 1, isBarrier = 1, hasDelaySlot = 1,
+    hasExtraSrcRegAllocReq = 1, isCTI = 1, Defs = [AT] in {
+  class TailCallRegR6<Instruction JumpInst, Register RT, RegisterOperand RO> :
+    PseudoSE<(outs), (ins RO:$rs), [(MipsTailCall RO:$rs)], II_JR>,
+    PseudoInstExpansion<(JumpInst RT:$rt, RO:$rs)>;
+}
+
+class PseudoIndirectBranchBaseR6<Instruction JumpInst, Register RT,
+                                 RegisterOperand RO> :
+    MipsPseudo<(outs), (ins RO:$rs), [(brind RO:$rs)],
+               II_IndirectBranchPseudo>,
+    PseudoInstExpansion<(JumpInst RT:$rt, RO:$rs)> {
+  let isTerminator=1;
+  let isBarrier=1;
+  let hasDelaySlot = 1;
+  let isBranch = 1;
+  let isIndirectBranch = 1;
+  bit isCTI = 1;
+}
+
+
+let AdditionalPredicates = [NotInMips16Mode, NotInMicroMips,
+                            NoIndirectJumpGuards] in {
+  def TAILCALLR6REG : TailCallRegR6<JALR, ZERO, GPR32Opnd>, ISA_MIPS32R6;
+  def PseudoIndirectBranchR6 : PseudoIndirectBranchBaseR6<JALR, ZERO,
+                                                          GPR32Opnd>,
+                               ISA_MIPS32R6;
+}
+
+let AdditionalPredicates = [NotInMips16Mode, NotInMicroMips,
+                            UseIndirectJumpsHazard] in {
+  def TAILCALLHBR6REG : TailCallReg<JR_HB_R6, GPR32Opnd>, ISA_MIPS32R6;
+  def PseudoIndrectHazardBranchR6 : PseudoIndirectBranchBase<JR_HB_R6,
+                                                             GPR32Opnd>,
+                                    ISA_MIPS32R6;
+}
+

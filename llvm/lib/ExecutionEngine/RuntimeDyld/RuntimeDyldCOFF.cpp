@@ -27,9 +27,12 @@ using namespace llvm::object;
 namespace {
 
 class LoadedCOFFObjectInfo final
-    : public RuntimeDyld::LoadedObjectInfoHelper<LoadedCOFFObjectInfo> {
+    : public LoadedObjectInfoHelper<LoadedCOFFObjectInfo,
+                                    RuntimeDyld::LoadedObjectInfo> {
 public:
-  LoadedCOFFObjectInfo(RuntimeDyldImpl &RTDyld, ObjSectionToIDMap ObjSecToIDMap)
+  LoadedCOFFObjectInfo(
+      RuntimeDyldImpl &RTDyld,
+      RuntimeDyld::LoadedObjectInfo::ObjSectionToIDMap ObjSecToIDMap)
       : LoadedObjectInfoHelper(RTDyld, std::move(ObjSecToIDMap)) {}
 
   OwningBinary<ObjectFile>
@@ -44,7 +47,7 @@ namespace llvm {
 std::unique_ptr<RuntimeDyldCOFF>
 llvm::RuntimeDyldCOFF::create(Triple::ArchType Arch,
                               RuntimeDyld::MemoryManager &MemMgr,
-                              RuntimeDyld::SymbolResolver &Resolver) {
+                              JITSymbolResolver &Resolver) {
   switch (Arch) {
   default: llvm_unreachable("Unsupported target for RuntimeDyldCOFF.");
   case Triple::x86:

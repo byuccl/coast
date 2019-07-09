@@ -1,4 +1,5 @@
 ; RUN: opt < %s -ipsccp -S | FileCheck %s
+; RUN: opt < %s -enable-debugify -ipsccp -debugify-quiet -disable-output
 
 ;;======================== test1
 
@@ -83,7 +84,7 @@ define internal {i64,i64} @test4a() {
 }
 
 ; CHECK-LABEL: define internal { i64, i64 } @test4a(
-; CHECK-NEXT:   ret { i64, i64 } { i64 5, i64 4 }
+; CHECK-NEXT:   ret { i64, i64 } undef
 ; CHECK-NEXT: }
 
 define i64 @test4b() personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*) {
@@ -167,7 +168,7 @@ define internal %T @test7a(i32 %A) {
   %mrv1 = insertvalue %T %mrv0, i32 %A, 1
   ret %T %mrv1
 ; CHECK-LABEL: @test7a(
-; CHECK-NEXT: ret %T { i32 18, i32 17 }
+; CHECK-NEXT: ret %T undef
 }
 
 define i32 @test7b() {
@@ -246,13 +247,14 @@ define i64 @test11a() {
 ; CHECK: ret i64 0
 }
 
-define void @test11b() {
+define i64 @test11b() {
   %call1 = call i64 @test11a()
   %call2 = call i64 @llvm.ctpop.i64(i64 %call1)
-  ret void
-; CHECK-LABEL: define void @test11b
+  ret i64 %call2
+; CHECK-LABEL: define i64 @test11b
 ; CHECK: %[[call1:.*]] = call i64 @test11a()
-; CHECK: %[[call2:.*]] = call i64 @llvm.ctpop.i64(i64 0)
+; CHECK-NOT: call i64 @llvm.ctpop.i64
+; CHECK-NEXT: ret i64 0
 }
 
 declare i64 @llvm.ctpop.i64(i64)

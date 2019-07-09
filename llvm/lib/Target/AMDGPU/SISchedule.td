@@ -47,8 +47,17 @@ def Write64Bit : SchedWrite;
 
 class SISchedMachineModel : SchedMachineModel {
   let CompleteModel = 0;
+  // MicroOpBufferSize = 1 means that instructions will always be added
+  // the ready queue when they become available.  This exposes them
+  // to the register pressure analysis.
+  let MicroOpBufferSize = 1;
   let IssueWidth = 1;
   let PostRAScheduler = 1;
+
+  // FIXME:Approximate 2 * branch cost.  Try to hack around bad
+  // early-ifcvt heuristics. These need improvement to avoid the OOE
+  // heuristics.
+  int MispredictPenalty = 20;
 }
 
 def SIFullSpeedModel : SISchedMachineModel;

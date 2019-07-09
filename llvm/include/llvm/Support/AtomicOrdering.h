@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief Atomic ordering constants.
+/// Atomic ordering constants.
 ///
 /// These values are used by LLVM to represent atomic ordering for C++11's
 /// memory model and more, as detailed in docs/Atomics.rst.
@@ -42,7 +42,7 @@ bool operator>=(AtomicOrderingCABI, AtomicOrderingCABI) = delete;
 
 // Validate an integral value which isn't known to fit within the enum's range
 // is a valid AtomicOrderingCABI.
-template <typename Int> static inline bool isValidAtomicOrderingCABI(Int I) {
+template <typename Int> inline bool isValidAtomicOrderingCABI(Int I) {
   return (Int)AtomicOrderingCABI::relaxed <= I &&
          I <= (Int)AtomicOrderingCABI::seq_cst;
 }
@@ -72,69 +72,68 @@ bool operator>=(AtomicOrdering, AtomicOrdering) = delete;
 
 // Validate an integral value which isn't known to fit within the enum's range
 // is a valid AtomicOrdering.
-template <typename Int> static inline bool isValidAtomicOrdering(Int I) {
-  return (Int)AtomicOrdering::NotAtomic <= I &&
-         I <= (Int)AtomicOrdering::SequentiallyConsistent;
+template <typename Int> inline bool isValidAtomicOrdering(Int I) {
+  return static_cast<Int>(AtomicOrdering::NotAtomic) <= I &&
+         I <= static_cast<Int>(AtomicOrdering::SequentiallyConsistent);
 }
 
 /// String used by LLVM IR to represent atomic ordering.
-static inline const char *toIRString(AtomicOrdering ao) {
+inline const char *toIRString(AtomicOrdering ao) {
   static const char *names[8] = {"not_atomic", "unordered", "monotonic",
                                  "consume",    "acquire",   "release",
                                  "acq_rel",    "seq_cst"};
-  return names[(size_t)ao];
+  return names[static_cast<size_t>(ao)];
 }
 
 /// Returns true if ao is stronger than other as defined by the AtomicOrdering
 /// lattice, which is based on C++'s definition.
-static inline bool isStrongerThan(AtomicOrdering ao, AtomicOrdering other) {
+inline bool isStrongerThan(AtomicOrdering ao, AtomicOrdering other) {
   static const bool lookup[8][8] = {
-      //               NA UN RX CO AC RE AR SC
-      /* NotAtomic */ {0, 0, 0, 0, 0, 0, 0, 0},
-      /* Unordered */ {1, 0, 0, 0, 0, 0, 0, 0},
-      /* relaxed   */ {1, 1, 0, 0, 0, 0, 0, 0},
-      /* consume   */ {1, 1, 1, 0, 0, 0, 0, 0},
-      /* acquire   */ {1, 1, 1, 1, 0, 0, 0, 0},
-      /* release   */ {1, 1, 1, 0, 0, 0, 0, 0},
-      /* acq_rel   */ {1, 1, 1, 1, 1, 1, 0, 0},
-      /* seq_cst   */ {1, 1, 1, 1, 1, 1, 1, 0},
+      //               NA     UN     RX     CO     AC     RE     AR     SC
+      /* NotAtomic */ {false, false, false, false, false, false, false, false},
+      /* Unordered */ { true, false, false, false, false, false, false, false},
+      /* relaxed   */ { true,  true, false, false, false, false, false, false},
+      /* consume   */ { true,  true,  true, false, false, false, false, false},
+      /* acquire   */ { true,  true,  true,  true, false, false, false, false},
+      /* release   */ { true,  true,  true, false, false, false, false, false},
+      /* acq_rel   */ { true,  true,  true,  true,  true,  true, false, false},
+      /* seq_cst   */ { true,  true,  true,  true,  true,  true,  true, false},
   };
-  return lookup[(size_t)ao][(size_t)other];
+  return lookup[static_cast<size_t>(ao)][static_cast<size_t>(other)];
 }
 
-static inline bool isAtLeastOrStrongerThan(AtomicOrdering ao,
-                                           AtomicOrdering other) {
+inline bool isAtLeastOrStrongerThan(AtomicOrdering ao, AtomicOrdering other) {
   static const bool lookup[8][8] = {
-      //               NA UN RX CO AC RE AR SC
-      /* NotAtomic */ {1, 0, 0, 0, 0, 0, 0, 0},
-      /* Unordered */ {1, 1, 0, 0, 0, 0, 0, 0},
-      /* relaxed   */ {1, 1, 1, 0, 0, 0, 0, 0},
-      /* consume   */ {1, 1, 1, 1, 0, 0, 0, 0},
-      /* acquire   */ {1, 1, 1, 1, 1, 0, 0, 0},
-      /* release   */ {1, 1, 1, 0, 0, 1, 0, 0},
-      /* acq_rel   */ {1, 1, 1, 1, 1, 1, 1, 0},
-      /* seq_cst   */ {1, 1, 1, 1, 1, 1, 1, 1},
+      //               NA     UN     RX     CO     AC     RE     AR     SC
+      /* NotAtomic */ { true, false, false, false, false, false, false, false},
+      /* Unordered */ { true,  true, false, false, false, false, false, false},
+      /* relaxed   */ { true,  true,  true, false, false, false, false, false},
+      /* consume   */ { true,  true,  true,  true, false, false, false, false},
+      /* acquire   */ { true,  true,  true,  true,  true, false, false, false},
+      /* release   */ { true,  true,  true, false, false,  true, false, false},
+      /* acq_rel   */ { true,  true,  true,  true,  true,  true,  true, false},
+      /* seq_cst   */ { true,  true,  true,  true,  true,  true,  true,  true},
   };
-  return lookup[(size_t)ao][(size_t)other];
+  return lookup[static_cast<size_t>(ao)][static_cast<size_t>(other)];
 }
 
-static inline bool isStrongerThanUnordered(AtomicOrdering ao) {
+inline bool isStrongerThanUnordered(AtomicOrdering ao) {
   return isStrongerThan(ao, AtomicOrdering::Unordered);
 }
 
-static inline bool isStrongerThanMonotonic(AtomicOrdering ao) {
+inline bool isStrongerThanMonotonic(AtomicOrdering ao) {
   return isStrongerThan(ao, AtomicOrdering::Monotonic);
 }
 
-static inline bool isAcquireOrStronger(AtomicOrdering ao) {
+inline bool isAcquireOrStronger(AtomicOrdering ao) {
   return isAtLeastOrStrongerThan(ao, AtomicOrdering::Acquire);
 }
 
-static inline bool isReleaseOrStronger(AtomicOrdering ao) {
+inline bool isReleaseOrStronger(AtomicOrdering ao) {
   return isAtLeastOrStrongerThan(ao, AtomicOrdering::Release);
 }
 
-static inline AtomicOrderingCABI toCABI(AtomicOrdering ao) {
+inline AtomicOrderingCABI toCABI(AtomicOrdering ao) {
   static const AtomicOrderingCABI lookup[8] = {
       /* NotAtomic */ AtomicOrderingCABI::relaxed,
       /* Unordered */ AtomicOrderingCABI::relaxed,
@@ -145,7 +144,7 @@ static inline AtomicOrderingCABI toCABI(AtomicOrdering ao) {
       /* acq_rel   */ AtomicOrderingCABI::acq_rel,
       /* seq_cst   */ AtomicOrderingCABI::seq_cst,
   };
-  return lookup[(size_t)ao];
+  return lookup[static_cast<size_t>(ao)];
 }
 
 } // end namespace llvm

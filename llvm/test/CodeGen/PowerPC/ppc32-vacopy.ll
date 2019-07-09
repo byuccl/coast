@@ -1,4 +1,4 @@
-; RUN: llc -mtriple="powerpc-unknown-linux-gnu" -mcpu=ppc64 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple="powerpc-unknown-linux-gnu" -mcpu=ppc64 < %s | FileCheck %s
 ; PR15286
 
 %va_list = type {i8, i8, i16, i8*, i8*}
@@ -16,9 +16,10 @@ entry:
 	ret void
 }
 ; CHECK: test_vacopy:
-; CHECK: lwz [[REG1:[0-9]+]], {{.*}}
-; CHECK: lwz [[REG2:[0-9]+]], {{.*}}
-; CHECK: lwz [[REG3:[0-9]+]], {{.*}}
-; CHECK: stw [[REG1]], {{.*}}
-; CHECK: stw [[REG2]], {{.*}}
-; CHECK: stw [[REG3]], {{.*}}
+; CHECK-DAG: lwz [[REG1:[0-9]+]], {{.*}}
+; CHECK-DAG: lwz [[REG2:[0-9]+]], {{.*}}
+; CHECK-DAG: lwz [[REG3:[0-9]+]], {{.*}}
+; CHECK-DAG: stw [[REG1]], {{.*}}
+; CHECK-DAG: stw [[REG2]], {{.*}}
+; CHECK-DAG: stw [[REG3]], {{.*}}
+; CHECK: blr

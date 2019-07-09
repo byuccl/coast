@@ -9,16 +9,14 @@
 // This describes the calling conventions for MSP430 architecture.
 //===----------------------------------------------------------------------===//
 
-//http://www.ti.com/lit/an/slaa664/slaa664.pdf
-
 //===----------------------------------------------------------------------===//
 // MSP430 Return Value Calling Convention
 //===----------------------------------------------------------------------===//
 def RetCC_MSP430 : CallingConv<[
-  // i8 are returned in registers R15B, R14B, R13B, R12B - not anymore!
+  // i8 are returned in registers R12B, R13B, R14B, R15B
   CCIfType<[i8], CCAssignToReg<[R12B, R13B, R14B, R15B]>>,
 
-  // i16 are returned in registers R15, R14, R13, R12 - not anymore!
+  // i16 are returned in registers R12, R13, R14, R15
   CCIfType<[i16], CCAssignToReg<[R12, R13, R14, R15]>>
 ]>;
 

@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MSP430.h"
 #include "InstPrinter/MSP430InstPrinter.h"
+#include "MSP430.h"
 #include "MSP430InstrInfo.h"
 #include "MSP430MCInstLower.h"
 #include "MSP430TargetMachine.h"
@@ -27,14 +27,11 @@
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
-#include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
-#include <fstream>
-#include <sstream>
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -45,9 +42,7 @@ namespace {
     MSP430AsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer)
         : AsmPrinter(TM, std::move(Streamer)) {}
 
-    const char *getPassName() const override {
-      return "MSP430 Assembly Printer";
-    }
+    StringRef getPassName() const override { return "MSP430 Assembly Printer"; }
 
     void printOperand(const MachineInstr *MI, int OpNum,
                       raw_ostream &O, const char* Modifier = nullptr);
@@ -60,7 +55,6 @@ namespace {
                                unsigned OpNo, unsigned AsmVariant,
                                const char *ExtraCode, raw_ostream &O) override;
     void EmitInstruction(const MachineInstr *MI) override;
-    bool doFinalization(Module &M);
   };
 } // end of anonymous namespace
 
@@ -161,44 +155,5 @@ void MSP430AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 // Force static initialization.
 extern "C" void LLVMInitializeMSP430AsmPrinter() {
-  RegisterAsmPrinter<MSP430AsmPrinter> X(TheMSP430Target);
-}
-
-//===----------------------------------------------------------------------===//
-//Emit definitions for external globals and functions to make CL430 happy
-bool MSP430AsmPrinter::doFinalization(Module &M) {
-	  SmallString<128> Str;
-	  raw_svector_ostream OS(Str);
-
-	//Create declaration for external functions
-	for(auto &F: M){
-		if(!F.isDeclaration())
-			continue;
-
-		//Ignore the LLVM created functions
-		if (F.getName().startswith("llvm.") || F.getName().startswith("nvvm."))
-		    continue;
-
-		OS << MAI->getGlobalDirective();
-		OS << F.getName();
-		OS << '\n';
-	}
-
-	//Create declarations for external globals
-	for (auto &GV : M.globals()) {
-		if(!GV.isDeclarationForLinker())
-			continue;
-
-		if (GV.getName().startswith("llvm.") || GV.getName().startswith("nvvm."))
-		    continue;
-
-		OS << MAI->getGlobalDirective();
-		OS << GV.getName();
-		OS << '\n';
-	}
-
-	OS << '\n';
-	OutStreamer->EmitRawText(OS.str());
-
-	return AsmPrinter::doFinalization(M);
+  RegisterAsmPrinter<MSP430AsmPrinter> X(getTheMSP430Target());
 }

@@ -1,4 +1,4 @@
-//===-- LambdaResolverMM - Redirect symbol lookup via a functor -*- C++ -*-===//
+//===- LambdaResolverMM - Redirect symbol lookup via a functor --*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -16,27 +16,25 @@
 #define LLVM_EXECUTIONENGINE_ORC_LAMBDARESOLVER_H
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ExecutionEngine/RuntimeDyld.h"
+#include "llvm/ExecutionEngine/JITSymbol.h"
 #include <memory>
 
 namespace llvm {
 namespace orc {
 
 template <typename DylibLookupFtorT, typename ExternalLookupFtorT>
-class LambdaResolver : public RuntimeDyld::SymbolResolver {
+class LambdaResolver : public LegacyJITSymbolResolver {
 public:
-
   LambdaResolver(DylibLookupFtorT DylibLookupFtor,
                  ExternalLookupFtorT ExternalLookupFtor)
       : DylibLookupFtor(DylibLookupFtor),
         ExternalLookupFtor(ExternalLookupFtor) {}
 
-  RuntimeDyld::SymbolInfo
-  findSymbolInLogicalDylib(const std::string &Name) final {
+  JITSymbol findSymbolInLogicalDylib(const std::string &Name) final {
     return DylibLookupFtor(Name);
   }
 
-  RuntimeDyld::SymbolInfo findSymbol(const std::string &Name) final {
+  JITSymbol findSymbol(const std::string &Name) final {
     return ExternalLookupFtor(Name);
   }
 
@@ -47,15 +45,15 @@ private:
 
 template <typename DylibLookupFtorT,
           typename ExternalLookupFtorT>
-std::unique_ptr<LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>>
+std::shared_ptr<LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>>
 createLambdaResolver(DylibLookupFtorT DylibLookupFtor,
                      ExternalLookupFtorT ExternalLookupFtor) {
-  typedef LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT> LR;
+  using LR = LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>;
   return make_unique<LR>(std::move(DylibLookupFtor),
                          std::move(ExternalLookupFtor));
 }
 
-} // End namespace orc.
-} // End namespace llvm.
+} // end namespace orc
+} // end namespace llvm
 
 #endif // LLVM_EXECUTIONENGINE_ORC_LAMBDARESOLVER_H

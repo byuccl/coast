@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=arm64 -aarch64-neon-syntax=apple -asm-verbose=false | FileCheck %s
+; RUN: llc < %s -mtriple=arm64-eabi -aarch64-neon-syntax=apple -asm-verbose=false | FileCheck %s
 
 define <8 x i8> @v_dup8(i8 %A) nounwind {
 ;CHECK-LABEL: v_dup8:
@@ -261,7 +261,7 @@ entry:
 define <2 x i32> @f(i32 %a, i32 %b) nounwind readnone  {
 ; CHECK-LABEL: f:
 ; CHECK-NEXT: fmov s0, w0
-; CHECK-NEXT: ins.s v0[1], w1
+; CHECK-NEXT: mov.s v0[1], w1
 ; CHECK-NEXT: ret
   %vecinit = insertelement <2 x i32> undef, i32 %a, i32 0
   %vecinit1 = insertelement <2 x i32> %vecinit, i32 %b, i32 1
@@ -271,9 +271,9 @@ define <2 x i32> @f(i32 %a, i32 %b) nounwind readnone  {
 define <4 x i32> @g(i32 %a, i32 %b) nounwind readnone  {
 ; CHECK-LABEL: g:
 ; CHECK-NEXT: fmov s0, w0
-; CHECK-NEXT: ins.s v0[1], w1
-; CHECK-NEXT: ins.s v0[2], w1
-; CHECK-NEXT: ins.s v0[3], w0
+; CHECK-NEXT: mov.s v0[1], w1
+; CHECK-NEXT: mov.s v0[2], w1
+; CHECK-NEXT: mov.s v0[3], w0
 ; CHECK-NEXT: ret
   %vecinit = insertelement <4 x i32> undef, i32 %a, i32 0
   %vecinit1 = insertelement <4 x i32> %vecinit, i32 %b, i32 1
@@ -285,7 +285,7 @@ define <4 x i32> @g(i32 %a, i32 %b) nounwind readnone  {
 define <2 x i64> @h(i64 %a, i64 %b) nounwind readnone  {
 ; CHECK-LABEL: h:
 ; CHECK-NEXT: fmov d0, x0
-; CHECK-NEXT: ins.d v0[1], x1
+; CHECK-NEXT: mov.d v0[1], x1
 ; CHECK-NEXT: ret
   %vecinit = insertelement <2 x i64> undef, i64 %a, i32 0
   %vecinit1 = insertelement <2 x i64> %vecinit, i64 %b, i32 1

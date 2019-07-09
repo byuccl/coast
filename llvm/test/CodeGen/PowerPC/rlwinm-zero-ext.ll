@@ -1,4 +1,4 @@
-; RUN: llc -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -O2 < %s | FileCheck %s
 target datalayout = "e-m:e-i64:64-n32:64"
 target triple = "powerpc64le-unknown-linux-gnu"
 
@@ -6,7 +6,7 @@ target triple = "powerpc64le-unknown-linux-gnu"
 define i8 @test1(i32 %a) {
 entry:
 ; CHECK-NOT: rlwinm {{{[0-9]+}}}, {{[0-9]+}}, 0, 24, 27
-; CHECK: rlwinm. [[REG:[0-9]+]], {{[0-9]+}}, 0, 24, 27
+; CHECK: andi. [[REG:[0-9]+]], {{[0-9]+}}, 240
 ; CHECK-NOT: cmplwi [[REG]], 0
 ; CHECK: beq 0
   %0 = and i32 %a, 240

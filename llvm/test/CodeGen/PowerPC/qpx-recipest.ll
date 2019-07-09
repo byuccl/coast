@@ -1,5 +1,5 @@
-; RUN: llc < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=a2q -enable-unsafe-fp-math | FileCheck %s
-; RUN: llc < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=a2q | FileCheck -check-prefix=CHECK-SAFE %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=a2q -enable-unsafe-fp-math | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=a2q | FileCheck -check-prefix=CHECK-SAFE %s
 target datalayout = "E-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-f128:128:128-v128:128:128-n32:64"
 target triple = "powerpc64-unknown-linux-gnu"
 
@@ -14,11 +14,11 @@ entry:
 
 ; CHECK-LABEL: @foo
 ; CHECK: qvfrsqrte
-; CHECK: qvfmul
+; CHECK-DAG: qvfmul
 ; FIXME: We're currently loading two constants here (1.5 and -1.5), and using
 ;        an qvfmadd instead of a qvfnmsub
-; CHECK: qvfmadd
-; CHECK: qvfmadd
+; CHECK-DAG: qvfmadd
+; CHECK-DAG: qvfmadd
 ; CHECK: qvfmul
 ; CHECK: qvfmul
 ; CHECK: qvfmadd
@@ -41,11 +41,11 @@ entry:
 
 ; CHECK-LABEL: @foof
 ; CHECK: qvfrsqrtes
-; CHECK: qvfmuls
+; CHECK-DAG: qvfmuls
 ; FIXME: We're currently loading two constants here (1.5 and -1.5), and using
 ;        an qvfmadd instead of a qvfnmsubs
-; CHECK: qvfmadds
-; CHECK: qvfmadds
+; CHECK-DAG: qvfmadds
+; CHECK-DAG: qvfmadds
 ; CHECK: qvfmuls
 ; CHECK: qvfmul
 ; CHECK: blr
@@ -65,11 +65,11 @@ entry:
 
 ; CHECK-LABEL: @food
 ; CHECK: qvfrsqrte
-; CHECK: qvfmul
+; CHECK-DAG: qvfmul
 ; FIXME: We're currently loading two constants here (1.5 and -1.5), and using
 ;        an qvfmadd instead of a qvfnmsub
-; CHECK: qvfmadd
-; CHECK: qvfmadd
+; CHECK-DAG: qvfmadd
+; CHECK-DAG: qvfmadd
 ; CHECK: qvfmul
 ; CHECK: qvfmul
 ; CHECK: qvfmadd
@@ -92,11 +92,11 @@ entry:
 
 ; CHECK-LABEL: @goo
 ; CHECK: qvfrsqrtes
-; CHECK: qvfmuls
+; CHECK-DAG: qvfmuls
 ; FIXME: We're currently loading two constants here (1.5 and -1.5), and using
 ;        an qvfmadd instead of a qvfnmsubs
-; CHECK: qvfmadds
-; CHECK: qvfmadds
+; CHECK-DAG: qvfmadds
+; CHECK-DAG: qvfmadds
 ; CHECK: qvfmuls
 ; CHECK: qvfmuls
 ; CHECK: blr

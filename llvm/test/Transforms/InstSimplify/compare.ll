@@ -65,6 +65,17 @@ define i1 @gep4() {
 ; CHECK-NEXT: ret i1 false
 }
 
+@a = common global [1 x i32] zeroinitializer, align 4
+
+define i1 @PR31262() {
+; CHECK-LABEL: @PR31262(
+; CHECK-NEXT:    ret i1 icmp uge (i32* getelementptr ([1 x i32], [1 x i32]* @a, i32 0, i32 undef), i32* getelementptr inbounds ([1 x i32], [1 x i32]* @a, i32 0, i32 0))
+;
+  %idx = getelementptr inbounds [1 x i32], [1 x i32]* @a, i64 0, i64 undef
+  %cmp = icmp uge i32* %idx, getelementptr inbounds ([1 x i32], [1 x i32]* @a, i32 0, i32 0)
+  ret i1 %cmp
+}
+
 define i1 @gep5() {
 ; CHECK-LABEL: @gep5(
   %x = alloca %gept, align 8
@@ -174,6 +185,17 @@ define i1 @gep13(i8* %ptr) {
 ; CHECK-NEXT: ret i1 false
 }
 
+define i1 @gep13_no_null_opt(i8* %ptr) #0 {
+; We can't prove this GEP is non-null.
+; CHECK-LABEL: @gep13_no_null_opt(
+; CHECK: getelementptr
+; CHECK: icmp
+; CHECK: ret
+  %x = getelementptr inbounds i8, i8* %ptr, i32 1
+  %cmp = icmp eq i8* %x, null
+  ret i1 %cmp
+}
+
 define i1 @gep14({ {}, i8 }* %ptr) {
 ; CHECK-LABEL: @gep14(
 ; We can't simplify this because the offset of one in the GEP actually doesn't
@@ -194,6 +216,17 @@ define i1 @gep15({ {}, [4 x {i8, i8}]}* %ptr, i32 %y) {
 ; CHECK-NEXT: ret i1 false
 }
 
+define i1 @gep15_no_null_opt({ {}, [4 x {i8, i8}]}* %ptr, i32 %y) #0 {
+; We can't prove this GEP is non-null.
+; CHECK-LABEL: @gep15_no_null_opt(
+; CHECK: getelementptr
+; CHECK: icmp
+; CHECK: ret
+  %x = getelementptr inbounds { {}, [4 x {i8, i8}]}, { {}, [4 x {i8, i8}]}* %ptr, i32 0, i32 1, i32 %y, i32 1
+  %cmp = icmp eq i8* %x, null
+  ret i1 %cmp
+}
+
 define i1 @gep16(i8* %ptr, i32 %a) {
 ; CHECK-LABEL: @gep16(
 ; We can prove this GEP is non-null because it is inbounds and because we know
@@ -203,6 +236,31 @@ define i1 @gep16(i8* %ptr, i32 %a) {
   %cmp = icmp eq i8* %x, null
   ret i1 %cmp
 ; CHECK-NEXT: ret i1 false
+}
+
+define i1 @gep16_no_null_opt(i8* %ptr, i32 %a) #0 {
+; We can't prove this GEP is non-null.
+; CHECK-LABEL: @gep16_no_null_opt(
+; CHECK getelementptr inbounds i8, i8* %ptr, i32 %b
+; CHECK: %cmp = icmp eq i8* %x, null
+; CHECK-NEXT: ret i1 %cmp
+  %b = or i32 %a, 1
+  %x = getelementptr inbounds i8, i8* %ptr, i32 %b
+  %cmp = icmp eq i8* %x, null
+  ret i1 %cmp
+}
+
+define i1 @gep17() {
+; CHECK-LABEL: @gep17(
+  %alloca = alloca i32, align 4
+  %bc = bitcast i32* %alloca to [4 x i8]*
+  %gep1 = getelementptr inbounds i32, i32* %alloca, i32 1
+  %pti1 = ptrtoint i32* %gep1 to i32
+  %gep2 = getelementptr inbounds [4 x i8], [4 x i8]* %bc, i32 0, i32 1
+  %pti2 = ptrtoint i8* %gep2 to i32
+  %cmp = icmp ugt i32 %pti1, %pti2
+  ret i1 %cmp
+; CHECK-NEXT: ret i1 true
 }
 
 define i1 @zext(i32 %x) {
@@ -356,14 +414,6 @@ define i1 @shl1(i32 %x) {
 ; CHECK: ret i1 false
 }
 
-define i1 @shl2(i32 %X) {
-; CHECK: @shl2
-  %sub = shl nsw i32 -1, %X
-  %cmp = icmp eq i32 %sub, 31
-  ret i1 %cmp
-; CHECK-NEXT: ret i1 false
-}
-
 define i1 @shl3(i32 %X) {
 ; CHECK: @shl3
   %sub = shl nuw i32 4, %X
@@ -372,34 +422,10 @@ define i1 @shl3(i32 %X) {
 ; CHECK-NEXT: ret i1 false
 }
 
-define i1 @shl4(i32 %X) {
-; CHECK: @shl4
-  %sub = shl nsw i32 -1, %X
-  %cmp = icmp sle i32 %sub, -1
-  ret i1 %cmp
-; CHECK-NEXT: ret i1 true
-}
-
-define i1 @shl5(i32 %X) {
-; CHECK: @shl5
-  %sub = shl nuw i32 4, %X
-  %cmp = icmp ugt i32 %sub, 3
-  ret i1 %cmp
-; CHECK-NEXT: ret i1 true
-}
-
 define i1 @lshr1(i32 %x) {
 ; CHECK-LABEL: @lshr1(
   %s = lshr i32 -1, %x
   %c = icmp eq i32 %s, 0
-  ret i1 %c
-; CHECK: ret i1 false
-}
-
-define i1 @lshr2(i32 %x) {
-; CHECK-LABEL: @lshr2(
-  %s = lshr i32 %x, 30
-  %c = icmp ugt i32 %s, 8
   ret i1 %c
 ; CHECK: ret i1 false
 }
@@ -428,18 +454,26 @@ define i1 @lshr5(i32 %X, i32 %Y) {
 ; CHECK: ret i1 false
 }
 
+define i1 @lshr6(i32 %X, i32 %Y) {
+; CHECK-LABEL: @lshr6(
+  %A = lshr i32 %X, %Y
+  %C = icmp ult i32 %X, %A
+  ret i1 %C
+; CHECK: ret i1 false
+}
+
+define i1 @lshr7(i32 %X, i32 %Y) {
+; CHECK-LABEL: @lshr7(
+  %A = lshr i32 %X, %Y
+  %C = icmp uge i32 %X, %A
+  ret i1 %C
+; CHECK: ret i1 true
+}
+
 define i1 @ashr1(i32 %x) {
 ; CHECK-LABEL: @ashr1(
   %s = ashr i32 -1, %x
   %c = icmp eq i32 %s, 0
-  ret i1 %c
-; CHECK: ret i1 false
-}
-
-define i1 @ashr2(i32 %x) {
-; CHECK-LABEL: @ashr2(
-  %s = ashr i32 %x, 30
-  %c = icmp slt i32 %s, -5
   ret i1 %c
 ; CHECK: ret i1 false
 }
@@ -521,14 +555,6 @@ define i1 @urem2(i32 %X, i32 %Y) {
 ; CHECK: ret i1 false
 }
 
-define i1 @urem3(i32 %X) {
-; CHECK-LABEL: @urem3(
-  %A = urem i32 %X, 10
-  %B = icmp ult i32 %A, 15
-  ret i1 %B
-; CHECK: ret i1 true
-}
-
 define i1 @urem4(i32 %X) {
 ; CHECK-LABEL: @urem4(
   %A = urem i32 %X, 15
@@ -562,14 +588,6 @@ define i1 @urem7(i32 %X) {
 ; CHECK-NOT: ret i1 false
 }
 
-define i1 @srem1(i32 %X) {
-; CHECK-LABEL: @srem1(
-  %A = srem i32 %X, -5
-  %B = icmp sgt i32 %A, 5
-  ret i1 %B
-; CHECK: ret i1 false
-}
-
 ; PR9343 #15
 ; CHECK-LABEL: @srem2(
 ; CHECK: ret i1 false
@@ -592,21 +610,41 @@ define i1 @srem3(i16 %X, i32 %Y) {
   ret i1 %E
 }
 
-define i1 @udiv1(i32 %X) {
-; CHECK-LABEL: @udiv1(
-  %A = udiv i32 %X, 1000000
-  %B = icmp ult i32 %A, 5000
-  ret i1 %B
-; CHECK: ret i1 true
-}
-
-define i1 @udiv2(i32 %X, i32 %Y, i32 %Z) {
+define i1 @udiv2(i32 %Z) {
 ; CHECK-LABEL: @udiv2(
+; CHECK-NEXT:    ret i1 true
+;
   %A = udiv exact i32 10, %Z
   %B = udiv exact i32 20, %Z
   %C = icmp ult i32 %A, %B
   ret i1 %C
-; CHECK: ret i1 true
+}
+
+; Exact sdiv and equality preds can simplify.
+
+define i1 @sdiv_exact_equality(i32 %Z) {
+; CHECK-LABEL: @sdiv_exact_equality(
+; CHECK-NEXT:    ret i1 false
+;
+  %A = sdiv exact i32 10, %Z
+  %B = sdiv exact i32 20, %Z
+  %C = icmp eq i32 %A, %B
+  ret i1 %C
+}
+
+; But not other preds: PR32949 - https://bugs.llvm.org/show_bug.cgi?id=32949
+
+define i1 @sdiv_exact_not_equality(i32 %Z) {
+; CHECK-LABEL: @sdiv_exact_not_equality(
+; CHECK-NEXT:    [[A:%.*]] = sdiv exact i32 10, %Z
+; CHECK-NEXT:    [[B:%.*]] = sdiv exact i32 20, %Z
+; CHECK-NEXT:    [[C:%.*]] = icmp ult i32 [[A]], [[B]]
+; CHECK-NEXT:    ret i1 [[C]]
+;
+  %A = sdiv exact i32 10, %Z
+  %B = sdiv exact i32 20, %Z
+  %C = icmp ult i32 %A, %B
+  ret i1 %C
 }
 
 define i1 @udiv3(i32 %X, i32 %Y) {
@@ -625,14 +663,6 @@ define i1 @udiv4(i32 %X, i32 %Y) {
 ; CHECK: ret i1 true
 }
 
-define i1 @udiv5(i32 %X) {
-; CHECK-LABEL: @udiv5(
-  %A = udiv i32 123, %X
-  %C = icmp ugt i32 %A, 124
-  ret i1 %C
-; CHECK: ret i1 false
-}
-
 ; PR11340
 define i1 @udiv6(i32 %X) nounwind {
 ; CHECK-LABEL: @udiv6(
@@ -642,29 +672,20 @@ define i1 @udiv6(i32 %X) nounwind {
 ; CHECK: ret i1 %C
 }
 
+define i1 @udiv7(i32 %X, i32 %Y) {
+; CHECK-LABEL: @udiv7(
+  %A = udiv i32 %X, %Y
+  %C = icmp ult i32 %X, %A
+  ret i1 %C
+; CHECK: ret i1 false
+}
 
-define i1 @sdiv1(i32 %X) {
-; CHECK-LABEL: @sdiv1(
-  %A = sdiv i32 %X, 1000000
-  %B = icmp slt i32 %A, 3000
-  ret i1 %B
+define i1 @udiv8(i32 %X, i32 %Y) {
+; CHECK-LABEL: @udiv8(
+  %A = udiv i32 %X, %Y
+  %C = icmp uge i32 %X, %A
+  ret i1 %C
 ; CHECK: ret i1 true
-}
-
-define i1 @or1(i32 %X) {
-; CHECK-LABEL: @or1(
-  %A = or i32 %X, 62
-  %B = icmp ult i32 %A, 50
-  ret i1 %B
-; CHECK: ret i1 false
-}
-
-define i1 @and1(i32 %X) {
-; CHECK-LABEL: @and1(
-  %A = and i32 %X, 62
-  %B = icmp ugt i32 %A, 70
-  ret i1 %B
-; CHECK: ret i1 false
 }
 
 define i1 @mul1(i32 %X) {
@@ -725,6 +746,17 @@ define i1 @alloca_compare(i64 %idx) {
   ; CHECK: ret i1 false
 }
 
+define i1 @alloca_compare_no_null_opt(i64 %idx) #0 {
+; CHECK-LABEL: alloca_compare_no_null_opt(
+; CHECK: %sv = alloca { i32, i32, [124 x i32] }
+; CHECK: %cmp = getelementptr inbounds { i32, i32, [124 x i32] }, { i32, i32, [124 x i32] }* %sv, i32 0, i32 2, i64 %idx
+; CHECK: %X = icmp eq i32* %cmp, null
+; CHECK: ret i1 %X
+  %sv = alloca { i32, i32, [124 x i32] }
+  %cmp = getelementptr inbounds { i32, i32, [124 x i32] }, { i32, i32, [124 x i32] }* %sv, i32 0, i32 2, i64 %idx
+  %X = icmp eq i32* %cmp, null
+  ret i1 %X
+}
 ; PR12075
 define i1 @infinite_gep() {
   ret i1 1
@@ -781,6 +813,19 @@ define i1 @alloca_gep(i64 %a, i64 %b) {
 ; CHECK-NEXT: ret i1 false
 }
 
+define i1 @alloca_gep_no_null_opt(i64 %a, i64 %b) #0 {
+; CHECK-LABEL: @alloca_gep_no_null_opt(
+; We can't prove this GEP is non-null.
+; CHECK: alloca
+; CHECK: getelementptr
+; CHECK: icmp
+; CHECK: ret
+  %strs = alloca [1000 x [1001 x i8]], align 16
+  %x = getelementptr inbounds [1000 x [1001 x i8]], [1000 x [1001 x i8]]* %strs, i64 0, i64 %a, i64 %b
+  %cmp = icmp eq i8* %x, null
+  ret i1 %cmp
+}
+
 define i1 @non_inbounds_gep_compare(i64* %a) {
 ; CHECK-LABEL: @non_inbounds_gep_compare(
 ; Equality compares with non-inbounds GEPs can be folded.
@@ -801,24 +846,6 @@ define i1 @non_inbounds_gep_compare2(i64* %a) {
   %cmp = icmp eq i64* %y, %y
   ret i1 %cmp
 ; CHECK-NEXT: ret i1 true
-}
-
-define <4 x i8> @vectorselectfold(<4 x i8> %a, <4 x i8> %b) {
-  %false = icmp ne <4 x i8> zeroinitializer, zeroinitializer
-  %sel = select <4 x i1> %false, <4 x i8> %a, <4 x i8> %b
-  ret <4 x i8> %sel
-
-; CHECK-LABEL: @vectorselectfold
-; CHECK-NEXT: ret <4 x i8> %b
-}
-
-define <4 x i8> @vectorselectfold2(<4 x i8> %a, <4 x i8> %b) {
-  %true = icmp eq <4 x i8> zeroinitializer, zeroinitializer
-  %sel = select <4 x i1> %true, <4 x i8> %a, <4 x i8> %b
-  ret <4 x i8> %sel
-
-; CHECK-LABEL: @vectorselectfold
-; CHECK-NEXT: ret <4 x i8> %a
 }
 
 define i1 @compare_always_true_slt(i16 %a) {
@@ -881,52 +908,11 @@ define i1 @compare_always_false_ne(i16 %a) {
 ; CHECK-NEXT: ret i1 true
 }
 
-define i1 @compare_dividend(i32 %a) {
-  %div = sdiv i32 2, %a
-  %cmp = icmp eq i32 %div, 3
-  ret i1 %cmp
-
-; CHECK-LABEL: @compare_dividend
-; CHECK-NEXT: ret i1 false
-}
-
 define i1 @lshr_ugt_false(i32 %a) {
   %shr = lshr i32 1, %a
   %cmp = icmp ugt i32 %shr, 1
   ret i1 %cmp
 ; CHECK-LABEL: @lshr_ugt_false
-; CHECK-NEXT: ret i1 false
-}
-
-define i1 @exact_lshr_ugt_false(i32 %a) {
-  %shr = lshr exact i32 30, %a
-  %cmp = icmp ult i32 %shr, 15
-  ret i1 %cmp
-; CHECK-LABEL: @exact_lshr_ugt_false
-; CHECK-NEXT: ret i1 false
-}
-
-define i1 @lshr_sgt_false(i32 %a) {
-  %shr = lshr i32 1, %a
-  %cmp = icmp sgt i32 %shr, 1
-  ret i1 %cmp
-; CHECK-LABEL: @lshr_sgt_false
-; CHECK-NEXT: ret i1 false
-}
-
-define i1 @ashr_sgt_false(i32 %a) {
-  %shr = ashr i32 -30, %a
-  %cmp = icmp sgt i32 %shr, -1
-  ret i1 %cmp
-; CHECK-LABEL: @ashr_sgt_false
-; CHECK-NEXT: ret i1 false
-}
-
-define i1 @exact_ashr_sgt_false(i32 %a) {
-  %shr = ashr exact i32 -30, %a
-  %cmp = icmp sgt i32 %shr, -15
-  ret i1 %cmp
-; CHECK-LABEL: @exact_ashr_sgt_false
 ; CHECK-NEXT: ret i1 false
 }
 
@@ -937,6 +923,13 @@ define i1 @nonnull_arg(i32* nonnull %i) {
 ; CHECK: ret i1 false
 }
 
+define i1 @nonnull_arg_no_null_opt(i32* nonnull %i) #0 {
+  %cmp = icmp eq i32* %i, null
+  ret i1 %cmp
+; CHECK-LABEL: @nonnull_arg_no_null_opt
+; CHECK: ret i1 false
+}
+
 define i1 @nonnull_deref_arg(i32* dereferenceable(4) %i) {
   %cmp = icmp eq i32* %i, null
   ret i1 %cmp
@@ -944,6 +937,13 @@ define i1 @nonnull_deref_arg(i32* dereferenceable(4) %i) {
 ; CHECK: ret i1 false
 }
 
+define i1 @nonnull_deref_arg_no_null_opt(i32* dereferenceable(4) %i) #0 {
+  %cmp = icmp eq i32* %i, null
+  ret i1 %cmp
+; CHECK-LABEL: @nonnull_deref_arg_no_null_opt
+; CHECK-NEXT: icmp
+; CHECK: ret
+}
 define i1 @nonnull_deref_as_arg(i32 addrspace(1)* dereferenceable(4) %i) {
   %cmp = icmp eq i32 addrspace(1)* %i, null
   ret i1 %cmp
@@ -968,6 +968,15 @@ define i1 @returns_nonnull_deref() {
   ret i1 %cmp
 ; CHECK-LABEL: @returns_nonnull_deref
 ; CHECK: ret i1 false
+}
+
+define i1 @returns_nonnull_deref_no_null_opt () #0 {
+  %call = call dereferenceable(4) i32* @returns_nonnull_deref_helper()
+  %cmp = icmp eq i32* %call, null
+  ret i1 %cmp
+; CHECK-LABEL: @returns_nonnull_deref_no_null_opt
+; CHECK: icmp
+; CHECK: ret
 }
 
 declare dereferenceable(4) i32 addrspace(1)* @returns_nonnull_deref_as_helper()
@@ -1005,22 +1014,40 @@ define i1 @nonnull_load_as_inner(i32 addrspace(1)** %addr) {
 
 ; If a bit is known to be zero for A and known to be one for B,
 ; then A and B cannot be equal.
-define i1 @icmp_eq_const(i32 %a) nounwind {
+define i1 @icmp_eq_const(i32 %a) {
+; CHECK-LABEL: @icmp_eq_const(
+; CHECK-NEXT:    ret i1 false
+;
   %b = mul nsw i32 %a, -2
   %c = icmp eq i32 %b, 1
   ret i1 %c
-
-; CHECK-LABEL: @icmp_eq_const
-; CHECK-NEXT: ret i1 false 
 }
 
-define i1 @icmp_ne_const(i32 %a) nounwind {
+define <2 x i1> @icmp_eq_const_vec(<2 x i32> %a) {
+; CHECK-LABEL: @icmp_eq_const_vec(
+; CHECK-NEXT:    ret <2 x i1> zeroinitializer
+;
+  %b = mul nsw <2 x i32> %a, <i32 -2, i32 -2>
+  %c = icmp eq <2 x i32> %b, <i32 1, i32 1>
+  ret <2 x i1> %c
+}
+
+define i1 @icmp_ne_const(i32 %a) {
+; CHECK-LABEL: @icmp_ne_const(
+; CHECK-NEXT:    ret i1 true
+;
   %b = mul nsw i32 %a, -2
   %c = icmp ne i32 %b, 1
   ret i1 %c
+}
 
-; CHECK-LABEL: @icmp_ne_const
-; CHECK-NEXT: ret i1 true
+define <2 x i1> @icmp_ne_const_vec(<2 x i32> %a) {
+; CHECK-LABEL: @icmp_ne_const_vec(
+; CHECK-NEXT:    ret <2 x i1> <i1 true, i1 true>
+;
+  %b = mul nsw <2 x i32> %a, <i32 -2, i32 -2>
+  %c = icmp ne <2 x i32> %b, <i32 1, i32 1>
+  ret <2 x i1> %c
 }
 
 define i1 @icmp_sdiv_int_min(i32 %a) {
@@ -1075,24 +1102,6 @@ define i1 @icmp_shl_nuw_1(i64 %a) {
  ret i1 %cmp
 
 ; CHECK-LABEL: @icmp_shl_nuw_1
-; CHECK-NEXT: ret i1 true
-}
-
-define i1 @icmp_shl_nsw_neg1(i64 %a) {
- %shl = shl nsw i64 -1, %a
- %cmp = icmp sge i64 %shl, 3
- ret i1 %cmp
-
-; CHECK-LABEL: @icmp_shl_nsw_neg1
-; CHECK-NEXT: ret i1 false
-}
-
-define i1 @icmp_shl_nsw_1(i64 %a) {
- %shl = shl nsw i64 1, %a
- %cmp = icmp sge i64 %shl, 0
- ret i1 %cmp
-
-; CHECK-LABEL: @icmp_shl_nsw_1
 ; CHECK-NEXT: ret i1 true
 }
 
@@ -1194,14 +1203,6 @@ define i1 @tautological8(i32 %A, i32 %B) {
   ret i1 %D
 ; CHECK-LABEL: @tautological8(
 ; CHECK: ret i1 false
-}
-
-define i1 @tautological9(i32 %x) {
-  %add = add nuw i32 %x, 13
-  %cmp = icmp ne i32 %add, 12
-  ret i1 %cmp
-; CHECK-LABEL: @tautological9(
-; CHECK: ret i1 true
 }
 
 declare void @helper_i1(i1)
@@ -1340,3 +1341,21 @@ define void @icmp_slt_sge_or(i32 %Ax, i32 %Bx) {
 ; CHECK: call void @helper_i1(i1 true)
   ret void
 }
+
+define i1 @constant_fold_inttoptr_null() {
+; CHECK-LABEL: @constant_fold_inttoptr_null(
+; CHECK-NEXT:    ret i1 false
+;
+  %x = icmp eq i32* inttoptr (i64 32 to i32*), null
+  ret i1 %x
+}
+
+define i1 @constant_fold_null_inttoptr() {
+; CHECK-LABEL: @constant_fold_null_inttoptr(
+; CHECK-NEXT:    ret i1 false
+;
+  %x = icmp eq i32* null, inttoptr (i64 32 to i32*)
+  ret i1 %x
+}
+
+attributes #0 = { "null-pointer-is-valid"="true" }

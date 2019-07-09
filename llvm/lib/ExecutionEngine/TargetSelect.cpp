@@ -48,9 +48,8 @@ TargetMachine *EngineBuilder::selectTarget(const Triple &TargetTriple,
   // Adjust the triple to match what the user requested.
   const Target *TheTarget = nullptr;
   if (!MArch.empty()) {
-    auto I = std::find_if(
-        TargetRegistry::targets().begin(), TargetRegistry::targets().end(),
-        [&](const Target &T) { return MArch == T.getName(); });
+    auto I = find_if(TargetRegistry::targets(),
+                     [&](const Target &T) { return MArch == T.getName(); });
 
     if (I == TargetRegistry::targets().end()) {
       if (ErrorStr)
@@ -93,11 +92,13 @@ TargetMachine *EngineBuilder::selectTarget(const Triple &TargetTriple,
   }
 
   // Allocate a target...
-  TargetMachine *Target = TheTarget->createTargetMachine(TheTriple.getTriple(),
-                                                         MCPU, FeaturesStr,
-                                                         Options,
-                                                         RelocModel, CMModel,
-                                                         OptLevel);
+  TargetMachine *Target =
+      TheTarget->createTargetMachine(TheTriple.getTriple(), MCPU, FeaturesStr,
+                                     Options, RelocModel, CMModel, OptLevel,
+				     /*JIT*/ true);
+  Target->Options.EmulatedTLS = EmulatedTLS;
+  Target->Options.ExplicitEmulatedTLS = true;
+
   assert(Target && "Could not allocate target machine!");
   return Target;
 }

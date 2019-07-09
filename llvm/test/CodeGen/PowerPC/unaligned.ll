@@ -1,6 +1,6 @@
-; RUN: llc < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=pwr7 -mattr=-vsx | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=pwr7 -mattr=-vsx | FileCheck %s
 target datalayout = "E-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f128:64:128-n32"
-; RUN: llc < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=pwr7 -mattr=+vsx | FileCheck -check-prefix=CHECK-VSX %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=pwr7 -mattr=+vsx | FileCheck -check-prefix=CHECK-VSX %s
 target datalayout = "E-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f128:64:128-n32"
 
 define void @foo1(i16* %p, i16* %r) nounwind {
@@ -74,8 +74,8 @@ entry:
 ; CHECK: stfd
 
 ; CHECK-VSX: @foo5
-; CHECK-VSX: lxsdx
-; CHECK-VSX: stxsdx
+; CHECK-VSX: lfdx
+; CHECK-VSX: stfdx
 }
 
 define void @foo6(<4 x float>* %p, <4 x float>* %r) nounwind {
@@ -89,7 +89,7 @@ entry:
 ; CHECK: @foo6
 ; CHECK-DAG: ld
 ; CHECK-DAG: ld
-; CHECK-DAG: stdx
+; CHECK-DAG: std
 ; CHECK: stdx
 
 ; For VSX on P7, unaligned loads and stores are preferable to aligned

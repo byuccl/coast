@@ -36,7 +36,6 @@
 #include "AArch64.h"
 #include "AArch64InstrInfo.h"
 #include "AArch64RegisterInfo.h"
-#include "AArch64Subtarget.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -60,10 +59,6 @@ TransformAll("aarch64-simd-scalar-force-all",
 STATISTIC(NumScalarInsnsUsed, "Number of scalar instructions used");
 STATISTIC(NumCopiesDeleted, "Number of cross-class copies deleted");
 STATISTIC(NumCopiesInserted, "Number of cross-class copies inserted");
-
-namespace llvm {
-void initializeAArch64AdvSIMDScalarPass(PassRegistry &);
-}
 
 #define AARCH64_ADVSIMD_NAME "AdvSIMD Scalar Operation Optimization"
 
@@ -94,9 +89,7 @@ public:
 
   bool runOnMachineFunction(MachineFunction &F) override;
 
-  const char *getPassName() const override {
-    return AARCH64_ADVSIMD_NAME;
-  }
+  StringRef getPassName() const override { return AARCH64_ADVSIMD_NAME; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -284,7 +277,7 @@ static MachineInstr *insertCopy(const TargetInstrInfo *TII, MachineInstr &MI,
   MachineInstrBuilder MIB = BuildMI(*MI.getParent(), MI, MI.getDebugLoc(),
                                     TII->get(AArch64::COPY), Dst)
                                 .addReg(Src, getKillRegState(IsKill));
-  DEBUG(dbgs() << "    adding copy: " << *MIB);
+  LLVM_DEBUG(dbgs() << "    adding copy: " << *MIB);
   ++NumCopiesInserted;
   return MIB;
 }
@@ -293,7 +286,7 @@ static MachineInstr *insertCopy(const TargetInstrInfo *TII, MachineInstr &MI,
 // to its equivalant AdvSIMD scalar instruction. Update inputs and outputs
 // to be the correct register class, minimizing cross-class copies.
 void AArch64AdvSIMDScalar::transformInstruction(MachineInstr &MI) {
-  DEBUG(dbgs() << "Scalar transform: " << MI);
+  LLVM_DEBUG(dbgs() << "Scalar transform: " << MI);
 
   MachineBasicBlock *MBB = MI.getParent();
   unsigned OldOpc = MI.getOpcode();
@@ -398,9 +391,9 @@ bool AArch64AdvSIMDScalar::processMachineBasicBlock(MachineBasicBlock *MBB) {
 // runOnMachineFunction - Pass entry point from PassManager.
 bool AArch64AdvSIMDScalar::runOnMachineFunction(MachineFunction &mf) {
   bool Changed = false;
-  DEBUG(dbgs() << "***** AArch64AdvSIMDScalar *****\n");
+  LLVM_DEBUG(dbgs() << "***** AArch64AdvSIMDScalar *****\n");
 
-  if (skipFunction(*mf.getFunction()))
+  if (skipFunction(mf.getFunction()))
     return false;
 
   MRI = &mf.getRegInfo();

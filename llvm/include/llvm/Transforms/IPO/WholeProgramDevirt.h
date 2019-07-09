@@ -28,6 +28,7 @@ template <typename T> class ArrayRef;
 template <typename T> class MutableArrayRef;
 class Function;
 class GlobalVariable;
+class ModuleSummaryIndex;
 
 namespace wholeprogramdevirt {
 
@@ -118,7 +119,7 @@ struct VirtualCallTarget {
 
   // For testing only.
   VirtualCallTarget(const TypeMemberInfo *TM, bool IsBigEndian)
-      : Fn(nullptr), TM(TM), IsBigEndian(IsBigEndian) {}
+      : Fn(nullptr), TM(TM), IsBigEndian(IsBigEndian), WasDevirt(false) {}
 
   // The function stored in the vtable.
   Function *Fn;
@@ -133,6 +134,9 @@ struct VirtualCallTarget {
 
   // Whether the target is big endian.
   bool IsBigEndian;
+
+  // Whether at least one call site to the target was devirtualized.
+  bool WasDevirt;
 
   // The minimum byte offset before the address point. This covers the bytes in
   // the vtable object before the address point (e.g. RTTI, access-to-top,
@@ -215,6 +219,13 @@ void setAfterReturnValues(MutableArrayRef<VirtualCallTarget> Targets,
 } // end namespace wholeprogramdevirt
 
 struct WholeProgramDevirtPass : public PassInfoMixin<WholeProgramDevirtPass> {
+  ModuleSummaryIndex *ExportSummary;
+  const ModuleSummaryIndex *ImportSummary;
+  WholeProgramDevirtPass(ModuleSummaryIndex *ExportSummary,
+                         const ModuleSummaryIndex *ImportSummary)
+      : ExportSummary(ExportSummary), ImportSummary(ImportSummary) {
+    assert(!(ExportSummary && ImportSummary));
+  }
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };
 

@@ -1,4 +1,4 @@
-; RUN: llc < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s | FileCheck %s
 target datalayout = "E-m:e-i64:64-n32:64"
 target triple = "powerpc64-bgq-linux"
 
@@ -75,9 +75,7 @@ entry:
 ; CHECK: bctrl
 ; CHECK: ld 2, 40(1)
 
-; CHECK: addis [[REG1:[0-9]+]], 2, .LC0@toc@ha
 ; CHECK: std 2, 40(1)
-; CHECK: ld {{[0-9]+}}, .LC0@toc@l([[REG1]])
 ; CHECK: {{mr|ld}} 2,
 ; CHECK: mtctr
 ; CHECK: bctrl

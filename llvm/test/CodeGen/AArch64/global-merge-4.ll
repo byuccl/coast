@@ -1,4 +1,4 @@
-; RUN: llc %s -mtriple=aarch64-linux-gnuabi -aarch64-global-merge -o - | FileCheck %s
+; RUN: llc %s -mtriple=aarch64-linux-gnuabi -aarch64-enable-global-merge -o - | FileCheck %s
 
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-n32:64-S128"
 target triple = "arm64-apple-ios7.0.0"
@@ -66,7 +66,7 @@ define internal i32* @returnFoo() #1 {
 
 ;CHECK:	.type	.L_MergedGlobals,@object  // @_MergedGlobals
 ;CHECK:	.local	.L_MergedGlobals
-;CHECK:	.comm	.L_MergedGlobals,60,16
+;CHECK:	.comm	.L_MergedGlobals,60,4
 
 attributes #0 = { nounwind ssp }
 attributes #1 = { nounwind readnone ssp }

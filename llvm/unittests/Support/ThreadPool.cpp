@@ -31,16 +31,14 @@ protected:
   bool isUnsupportedOSOrEnvironment() {
     Triple Host(Triple::normalize(sys::getProcessTriple()));
 
-    if (std::find(UnsupportedEnvironments.begin(), UnsupportedEnvironments.end(),
-                  Host.getEnvironment()) != UnsupportedEnvironments.end())
+    if (find(UnsupportedEnvironments, Host.getEnvironment()) !=
+        UnsupportedEnvironments.end())
       return true;
 
-    if (std::find(UnsupportedOSs.begin(), UnsupportedOSs.end(), Host.getOS())
-        != UnsupportedOSs.end())
+    if (is_contained(UnsupportedOSs, Host.getOS()))
       return true;
 
-    if (std::find(UnsupportedArchs.begin(), UnsupportedArchs.end(), Host.getArch())
-        != UnsupportedArchs.end())
+    if (is_contained(UnsupportedArchs, Host.getArch()))
       return true;
 
     return false;
@@ -92,7 +90,7 @@ TEST_F(ThreadPoolTest, AsyncBarrier) {
 
   ThreadPool Pool;
   for (size_t i = 0; i < 5; ++i) {
-    Pool.async([this, &checked_in, i] {
+    Pool.async([this, &checked_in] {
       waitForMainThread();
       ++checked_in;
     });
@@ -156,7 +154,7 @@ TEST_F(ThreadPoolTest, PoolDestruction) {
   {
     ThreadPool Pool;
     for (size_t i = 0; i < 5; ++i) {
-      Pool.async([this, &checked_in, i] {
+      Pool.async([this, &checked_in] {
         waitForMainThread();
         ++checked_in;
       });

@@ -23,8 +23,8 @@ define i41 @sext(i1 %C) {
 
 define i999 @not_zext(i1 %C) {
 ; CHECK-LABEL: @not_zext(
-; CHECK-NEXT:    [[TMP1:%.*]] = zext i1 %C to i999
-; CHECK-NEXT:    [[V:%.*]] = xor i999 [[TMP1]], 1
+; CHECK-NEXT:    [[NOT_C:%.*]] = xor i1 %C, true
+; CHECK-NEXT:    [[V:%.*]] = zext i1 [[NOT_C]] to i999
 ; CHECK-NEXT:    ret i999 [[V]]
 ;
   %V = select i1 %C, i999 0, i999 1
@@ -63,8 +63,8 @@ define <2 x i32> @sext_vec(<2 x i1> %C) {
 
 define <2 x i999> @not_zext_vec(<2 x i1> %C) {
 ; CHECK-LABEL: @not_zext_vec(
-; CHECK-NEXT:    [[TMP1:%.*]] = zext <2 x i1> %C to <2 x i999>
-; CHECK-NEXT:    [[V:%.*]] = xor <2 x i999> [[TMP1]], <i999 1, i999 1>
+; CHECK-NEXT:    [[NOT_C:%.*]] = xor <2 x i1> %C, <i1 true, i1 true>
+; CHECK-NEXT:    [[V:%.*]] = zext <2 x i1> [[NOT_C]] to <2 x i999>
 ; CHECK-NEXT:    ret <2 x i999> [[V]]
 ;
   %V = select <2 x i1> %C, <2 x i999> <i999 0, i999 0>, <2 x i999> <i999 1, i999 1>
@@ -113,32 +113,6 @@ define i1023 @test4(i1023 %X) {
 ;
   %t = icmp slt i1023 %X, 0
   %V = select i1 %t, i1023 -1, i1023 0
-  ret i1023 %V
-}
-
-;; ((X & 27) ? 27 : 0)
-
-define i41 @test5(i41 %X) {
-; CHECK-LABEL: @test5(
-; CHECK-NEXT:    [[Y:%.*]] = and i41 %X, 32
-; CHECK-NEXT:    ret i41 [[Y]]
-;
-  %Y = and i41 %X, 32
-  %t = icmp ne i41 %Y, 0
-  %V = select i1 %t, i41 32, i41 0
-  ret i41 %V
-}
-
-;; ((X & 27) ? 27 : 0)
-
-define i1023 @test6(i1023 %X) {
-; CHECK-LABEL: @test6(
-; CHECK-NEXT:    [[Y:%.*]] = and i1023 %X, 64
-; CHECK-NEXT:    ret i1023 [[Y]]
-;
-  %Y = and i1023 %X, 64
-  %t = icmp ne i1023 %Y, 0
-  %V = select i1 %t, i1023 64, i1023 0
   ret i1023 %V
 }
 

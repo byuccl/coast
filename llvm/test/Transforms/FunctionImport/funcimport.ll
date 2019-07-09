@@ -4,17 +4,16 @@
 ; RUN: llvm-lto -thinlto -print-summary-global-ids -o %t3 %t.bc %t2.bc 2>&1 | FileCheck %s --check-prefix=GUID
 
 ; Do the import now
-; RUN: opt -disable-force-link-odr -function-import -stats -print-imports -enable-import-metadata -summary-file %t3.thinlto.bc %t.bc -S 2>&1 | FileCheck %s --check-prefix=CHECK --check-prefix=INSTLIMDEF
-; "-stats" requires +Asserts.
+; RUN: opt -function-import -stats -print-imports -enable-import-metadata -summary-file %t3.thinlto.bc %t.bc -S 2>&1 | FileCheck %s --check-prefix=CHECK --check-prefix=INSTLIMDEF
+; Try again with new pass manager
+; RUN: opt -passes='function-import' -stats -print-imports -enable-import-metadata -summary-file %t3.thinlto.bc %t.bc -S 2>&1 | FileCheck %s --check-prefix=CHECK --check-prefix=INSTLIMDEF
+; RUN: opt -passes='function-import' -debug-only=function-import -enable-import-metadata -summary-file %t3.thinlto.bc %t.bc -S 2>&1 | FileCheck %s --check-prefix=DUMP
+; "-stats" and "-debug-only" require +Asserts.
 ; REQUIRES: asserts
 
 ; Test import with smaller instruction limit
-; RUN: opt -disable-force-link-odr -function-import -enable-import-metadata  -summary-file %t3.thinlto.bc %t.bc -import-instr-limit=5 -S | FileCheck %s --check-prefix=CHECK --check-prefix=INSTLIM5
+; RUN: opt -function-import -enable-import-metadata  -summary-file %t3.thinlto.bc %t.bc -import-instr-limit=5 -S | FileCheck %s --check-prefix=CHECK --check-prefix=INSTLIM5
 ; INSTLIM5-NOT: @staticfunc.llvm.
-
-; Test import with smaller instruction limit and without the -disable-force-link-odr
-; RUN: opt -function-import -summary-file %t3.thinlto.bc %t.bc -import-instr-limit=5 -S | FileCheck %s --check-prefix=INSTLIM5ODR
-; INSTLIM5ODR: define linkonce_odr void @linkonceodr() {
 
 
 define i32 @main() #0 {
@@ -30,6 +29,7 @@ entry:
   call void (...) @weakfunc()
   call void (...) @linkoncefunc2()
   call void (...) @referencelargelinkonce()
+  call void (...) @variadic()
   ret i32 0
 }
 
@@ -37,14 +37,14 @@ entry:
 ; CHECK-DAG: declare void @weakalias
 declare void @weakalias(...) #1
 
-; Cannot create an alias to available_externally
-; CHECK-DAG: declare void @analias
+; External alias imported as available_externally copy of aliasee
+; CHECK-DAG: define available_externally void @analias
 declare void @analias(...) #1
 
-; FIXME: Add this checking back when follow on fix to add alias summary
-; records is committed.
-; Aliases import the aliasee function
+; External alias imported as available_externally copy of aliasee
+; (linkoncealias is an external alias to a linkonce_odr)
 declare void @linkoncealias(...) #1
+; CHECK-DAG: define available_externally void @linkoncealias()
 
 ; INSTLIMDEF-DAG: Import referencestatics
 ; INSTLIMDEF-DAG: define available_externally i32 @referencestatics(i32 %i) !thinlto_src_module !0 {
@@ -81,7 +81,7 @@ declare void @callfuncptr(...) #1
 
 ; Ensure that all uses of local variable @P which has used in setfuncptr
 ; and callfuncptr are to the same promoted/renamed global.
-; CHECK-DAG: @P.llvm.{{.*}} = external hidden global void ()*
+; CHECK-DAG: @P.llvm.{{.*}} = available_externally hidden global void ()* null
 ; CHECK-DAG: %0 = load void ()*, void ()** @P.llvm.
 ; CHECK-DAG: store void ()* @staticfunc2.llvm.{{.*}}, void ()** @P.llvm.
 
@@ -103,8 +103,13 @@ declare void @linkoncefunc2(...) #1
 ; INSTLIMDEF-DAG: define available_externally hidden void @funcwithpersonality.llvm.{{.*}}() personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*) !thinlto_src_module !0 {
 ; INSTLIM5-DAG: declare hidden void @funcwithpersonality.llvm.{{.*}}()
 
+; CHECK-DAG: declare void @variadic(...)
+declare void @variadic(...)
+
 ; INSTLIMDEF-DAG: Import globalfunc2
 ; INSTLIMDEF-DAG: 13 function-import - Number of functions imported
+; INSTLIMDEF-DAG: 4 function-import - Number of global variables imported
+
 ; CHECK-DAG: !0 = !{!"{{.*}}/Inputs/funcimport.ll"}
 
 ; The actual GUID values will depend on path to test.
@@ -140,3 +145,9 @@ declare void @linkoncefunc2(...) #1
 ; GUID-DAG: GUID {{.*}} is linkoncealias
 ; GUID-DAG: GUID {{.*}} is callfuncptr
 ; GUID-DAG: GUID {{.*}} is linkoncefunc
+
+; DUMP:       Module [[M1:.*]] imports from 1 module
+; DUMP-NEXT:  13 functions imported from [[M2:.*]]
+; DUMP-NEXT:  4 vars imported from [[M2]]
+; DUMP:       Imported 13 functions for Module [[M1]]
+; DUMP-NEXT:  Imported 4 global variables for Module [[M1]]

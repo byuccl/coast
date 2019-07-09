@@ -18,10 +18,22 @@ include "llvm/Target/Target.td"
 //===----------------------------------------------------------------------===//
 // Subtarget Features. 
 //===----------------------------------------------------------------------===//
-def FeatureX : SubtargetFeature<"ext", "ExtendedInsts", "true",
+def FeatureX
+ : SubtargetFeature<"ext", "ExtendedInsts", "true",
                     "Enable MSP430-X extensions">;
-def HwMult   : SubtargetFeature<"hwmult", "HwMultiplier", "true",
-                     "Target has hardware multiplier">;
+
+def FeatureHWMult16
+ : SubtargetFeature<"hwmult16", "HWMultMode", "HWMult16",
+                    "Enable 16-bit hardware multiplier">;
+
+def FeatureHWMult32
+ : SubtargetFeature<"hwmult32", "HWMultMode", "HWMult32",
+                    "Enable 32-bit hardware multiplier">;
+
+def FeatureHWMultF5
+ : SubtargetFeature<"hwmultf5", "HWMultMode", "HWMultF5",
+                    "Enable F5 series hardware multiplier">;
+
 //===----------------------------------------------------------------------===//
 // MSP430 supported processors.
 //===----------------------------------------------------------------------===//
@@ -29,9 +41,8 @@ class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
 def : Proc<"generic",         []>;
-def : Proc<"msp430fr5969",    [FeatureX, HwMult]>;
-def : Proc<"msp430fr6989",    [FeatureX, HwMult]>;
-def : Proc<"msp430fr4133",    []>;
+def : Proc<"msp430",          []>;
+def : Proc<"msp430x",         [FeatureX]>;
 
 //===----------------------------------------------------------------------===//
 // Register File Description

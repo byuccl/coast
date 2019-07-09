@@ -15,6 +15,7 @@
 #define LLVM_LIB_TARGET_LANAI_MCTARGETDESC_LANAIMCTARGETDESC_H
 
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/DataTypes.h"
 
 namespace llvm {
@@ -23,7 +24,7 @@ class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
 class MCInstrAnalysis;
-class MCObjectWriter;
+class MCObjectTargetWriter;
 class MCRelocationInfo;
 class MCSubtargetInfo;
 class Target;
@@ -31,17 +32,17 @@ class Triple;
 class StringRef;
 class raw_pwrite_stream;
 
-extern Target TheLanaiTarget;
+Target &getTheLanaiTarget();
 
 MCCodeEmitter *createLanaiMCCodeEmitter(const MCInstrInfo &MCII,
                                         const MCRegisterInfo &MRI,
                                         MCContext &Ctx);
 
-MCAsmBackend *createLanaiAsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                                    const Triple &TheTriple, StringRef CPU);
+MCAsmBackend *createLanaiAsmBackend(const Target &T, const MCSubtargetInfo &STI,
+                                    const MCRegisterInfo &MRI,
+                                    const MCTargetOptions &Options);
 
-MCObjectWriter *createLanaiELFObjectWriter(raw_pwrite_stream &OS,
-                                           uint8_t OSABI);
+std::unique_ptr<MCObjectTargetWriter> createLanaiELFObjectWriter(uint8_t OSABI);
 } // namespace llvm
 
 // Defines symbolic names for Lanai registers.  This defines a mapping from

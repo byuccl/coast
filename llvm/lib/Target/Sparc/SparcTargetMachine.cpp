@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "SparcTargetMachine.h"
-#include "SparcTargetObjectFile.h"
-#include "Sparc.h"
 #include "LeonPasses.h"
+#include "Sparc.h"
+#include "SparcTargetObjectFile.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -22,9 +22,9 @@ using namespace llvm;
 
 extern "C" void LLVMInitializeSparcTarget() {
   // Register the target.
-  RegisterTargetMachine<SparcV8TargetMachine> X(TheSparcTarget);
-  RegisterTargetMachine<SparcV9TargetMachine> Y(TheSparcV9Target);
-  RegisterTargetMachine<SparcelTargetMachine> Z(TheSparcelTarget);
+  RegisterTargetMachine<SparcV8TargetMachine> X(getTheSparcTarget());
+  RegisterTargetMachine<SparcV9TargetMachine> Y(getTheSparcV9Target());
+  RegisterTargetMachine<SparcelTargetMachine> Z(getTheSparcelTarget());
 }
 
 static std::string computeDataLayout(const Triple &T, bool is64Bit) {
@@ -60,15 +60,39 @@ static Reloc::Model getEffectiveRelocModel(Optional<Reloc::Model> RM) {
   return *RM;
 }
 
+// Code models. Some only make sense for 64-bit code.
+//
+// SunCC  Reloc   CodeModel  Constraints
+// abs32  Static  Small      text+data+bss linked below 2^32 bytes
+// abs44  Static  Medium     text+data+bss linked below 2^44 bytes
+// abs64  Static  Large      text smaller than 2^31 bytes
+// pic13  PIC_    Small      GOT < 2^13 bytes
+// pic32  PIC_    Medium     GOT < 2^32 bytes
+//
+// All code models require that the text segment is smaller than 2GB.
+static CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM,
+                                              Reloc::Model RM, bool Is64Bit,
+                                              bool JIT) {
+  if (CM)
+    return *CM;
+  if (Is64Bit) {
+    if (JIT)
+      return CodeModel::Large;
+    return RM == Reloc::PIC_ ? CodeModel::Small : CodeModel::Medium;
+  }
+  return CodeModel::Small;
+}
+
 /// Create an ILP32 architecture model
-SparcTargetMachine::SparcTargetMachine(const Target &T, const Triple &TT,
-                                       StringRef CPU, StringRef FS,
-                                       const TargetOptions &Options,
-                                       Optional<Reloc::Model> RM,
-                                       CodeModel::Model CM,
-                                       CodeGenOpt::Level OL, bool is64bit)
-    : LLVMTargetMachine(T, computeDataLayout(TT, is64bit), TT, CPU, FS, Options,
-                        getEffectiveRelocModel(RM), CM, OL),
+SparcTargetMachine::SparcTargetMachine(
+    const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
+    const TargetOptions &Options, Optional<Reloc::Model> RM,
+    Optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT, bool is64bit)
+    : LLVMTargetMachine(
+          T, computeDataLayout(TT, is64bit), TT, CPU, FS, Options,
+          getEffectiveRelocModel(RM),
+          getEffectiveCodeModel(CM, getEffectiveRelocModel(RM), is64bit, JIT),
+          OL),
       TLOF(make_unique<SparcELFTargetObjectFile>()),
       Subtarget(TT, CPU, FS, *this, is64bit), is64Bit(is64bit) {
   initAsmInfo();
@@ -114,8 +138,8 @@ namespace {
 /// Sparc Code Generator Pass Configuration Options.
 class SparcPassConfig : public TargetPassConfig {
 public:
-  SparcPassConfig(SparcTargetMachine *TM, PassManagerBase &PM)
-      : TargetPassConfig(TM, PM) {}
+  SparcPassConfig(SparcTargetMachine &TM, PassManagerBase &PM)
+    : TargetPassConfig(TM, PM) {}
 
   SparcTargetMachine &getSparcTargetMachine() const {
     return getTM<SparcTargetMachine>();
@@ -128,11 +152,11 @@ public:
 } // namespace
 
 TargetPassConfig *SparcTargetMachine::createPassConfig(PassManagerBase &PM) {
-  return new SparcPassConfig(this, PM);
+  return new SparcPassConfig(*this, PM);
 }
 
 void SparcPassConfig::addIRPasses() {
-  addPass(createAtomicExpandPass(&getSparcTargetMachine()));
+  addPass(createAtomicExpandPass());
 
   TargetPassConfig::addIRPasses();
 }
@@ -142,64 +166,41 @@ bool SparcPassConfig::addInstSelector() {
   return false;
 }
 
-void SparcPassConfig::addPreEmitPass() {
-  addPass(createSparcDelaySlotFillerPass(getSparcTargetMachine()));
-  if (this->getSparcTargetMachine().getSubtargetImpl()->ignoreZeroFlag()) {
-    addPass(new IgnoreZeroFlag(getSparcTargetMachine()));
+void SparcPassConfig::addPreEmitPass(){
+  addPass(createSparcDelaySlotFillerPass());
+
+  if (this->getSparcTargetMachine().getSubtargetImpl()->insertNOPLoad())
+  {
+    addPass(new InsertNOPLoad());
   }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->performSDIVReplace()) {
-    addPass(new ReplaceSDIV(getSparcTargetMachine()));
+  if (this->getSparcTargetMachine().getSubtargetImpl()->detectRoundChange()) {
+    addPass(new DetectRoundChange());
   }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->fixCallImmediates()) {
-    addPass(new FixCALL(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->fixFSMULD()) {
-    addPass(new FixFSMULD(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->replaceFMULS()) {
-    addPass(new ReplaceFMULS(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->preventRoundChange()) {
-    addPass(new PreventRoundChange(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->fixAllFDIVSQRT()) {
-    addPass(new FixAllFDIVSQRT(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->insertNOPsLoadStore()) {
-    addPass(new InsertNOPsLoadStore(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->insertNOPLoad()) {
-    addPass(new InsertNOPLoad(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine().getSubtargetImpl()->flushCacheLineSWAP()) {
-    addPass(new FlushCacheLineSWAP(getSparcTargetMachine()));
-  }
-  if (this->getSparcTargetMachine()
-          .getSubtargetImpl()
-          ->insertNOPDoublePrecision()) {
-    addPass(new InsertNOPDoublePrecision(getSparcTargetMachine()));
+  if (this->getSparcTargetMachine().getSubtargetImpl()->fixAllFDIVSQRT())
+  {
+    addPass(new FixAllFDIVSQRT());
   }
 }
 
-void SparcV8TargetMachine::anchor() {}
+void SparcV8TargetMachine::anchor() { }
 
 SparcV8TargetMachine::SparcV8TargetMachine(const Target &T, const Triple &TT,
                                            StringRef CPU, StringRef FS,
                                            const TargetOptions &Options,
                                            Optional<Reloc::Model> RM,
-                                           CodeModel::Model CM,
-                                           CodeGenOpt::Level OL)
-    : SparcTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, false) {}
+                                           Optional<CodeModel::Model> CM,
+                                           CodeGenOpt::Level OL, bool JIT)
+    : SparcTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, JIT, false) {}
 
-void SparcV9TargetMachine::anchor() {}
+void SparcV9TargetMachine::anchor() { }
 
 SparcV9TargetMachine::SparcV9TargetMachine(const Target &T, const Triple &TT,
                                            StringRef CPU, StringRef FS,
                                            const TargetOptions &Options,
                                            Optional<Reloc::Model> RM,
-                                           CodeModel::Model CM,
-                                           CodeGenOpt::Level OL)
-    : SparcTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, true) {}
+                                           Optional<CodeModel::Model> CM,
+                                           CodeGenOpt::Level OL, bool JIT)
+    : SparcTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, JIT, true) {}
 
 void SparcelTargetMachine::anchor() {}
 
@@ -207,6 +208,6 @@ SparcelTargetMachine::SparcelTargetMachine(const Target &T, const Triple &TT,
                                            StringRef CPU, StringRef FS,
                                            const TargetOptions &Options,
                                            Optional<Reloc::Model> RM,
-                                           CodeModel::Model CM,
-                                           CodeGenOpt::Level OL)
-    : SparcTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, false) {}
+                                           Optional<CodeModel::Model> CM,
+                                           CodeGenOpt::Level OL, bool JIT)
+    : SparcTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, JIT, false) {}

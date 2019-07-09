@@ -20,8 +20,8 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/MC/MachineLocation.h"
-#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -32,7 +32,7 @@ bool NVPTXFrameLowering::hasFP(const MachineFunction &MF) const { return true; }
 
 void NVPTXFrameLowering::emitPrologue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
-  if (MF.getFrameInfo()->hasStackObjects()) {
+  if (MF.getFrameInfo().hasStackObjects()) {
     assert(&MF.front() == &MBB && "Shrink-wrapping not yet supported");
     MachineInstr *MI = &MBB.front();
     MachineRegisterInfo &MR = MF.getRegInfo();
@@ -62,6 +62,14 @@ void NVPTXFrameLowering::emitPrologue(MachineFunction &MF,
             NVPTX::VRFrameLocal)
         .addImm(MF.getFunctionNumber());
   }
+}
+
+int NVPTXFrameLowering::getFrameIndexReference(const MachineFunction &MF,
+                                               int FI,
+                                               unsigned &FrameReg) const {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  FrameReg = NVPTX::VRDepot;
+  return MFI.getObjectOffset(FI) - getOffsetOfLocalArea();
 }
 
 void NVPTXFrameLowering::emitEpilogue(MachineFunction &MF,

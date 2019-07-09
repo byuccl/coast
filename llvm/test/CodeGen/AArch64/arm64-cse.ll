@@ -1,4 +1,4 @@
-; RUN: llc -O3 < %s -aarch64-atomic-cfg-tidy=0 -aarch64-gep-opt=false -verify-machineinstrs | FileCheck %s
+; RUN: llc -O3 < %s -aarch64-enable-atomic-cfg-tidy=0 -aarch64-enable-gep-opt=false -verify-machineinstrs | FileCheck %s
 target triple = "arm64-apple-ios"
 
 ; rdar://12462006
@@ -12,7 +12,7 @@ entry:
 ; CHECK-NOT: sub
 ; CHECK: b.ge
 ; CHECK: sub
-; CHECK: sub
+; CHECK-NEXT: add
 ; CHECK-NOT: sub
 ; CHECK: ret
  %0 = load i32, i32* %offset, align 4

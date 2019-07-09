@@ -1,5 +1,6 @@
-; RUN: opt < %s -loop-unroll -pragma-unroll-threshold=1024 -S | FileCheck %s
-; RUN: opt < %s -loop-unroll -loop-unroll -pragma-unroll-threshold=1024 -S | FileCheck %s
+; RUN: opt < %s -loop-unroll -pragma-unroll-threshold=1024 -S | FileCheck -check-prefixes=CHECK,REM %s
+; RUN: opt < %s -loop-unroll -loop-unroll -pragma-unroll-threshold=1024 -S | FileCheck -check-prefixes=CHECK,REM %s
+; RUN: opt < %s -loop-unroll -unroll-allow-remainder=0 -pragma-unroll-threshold=1024 -S | FileCheck -check-prefixes=CHECK,NOREM %s
 ;
 ; Run loop unrolling twice to verify that loop unrolling metadata is properly
 ; removed and further unrolling is disabled after the pass is run once.
@@ -108,29 +109,6 @@ for.end:                                          ; preds = %for.body
 !3 = !{!3, !4}
 !4 = !{!"llvm.loop.unroll.full"}
 
-; #pragma clang loop unroll(full)
-; Loop should be fully unrolled, even for optsize.
-;
-; CHECK-LABEL: @loop64_with_full_optsize(
-; CHECK-NOT: br i1
-define void @loop64_with_full_optsize(i32* nocapture %a) optsize {
-entry:
-  br label %for.body
-
-for.body:                                         ; preds = %for.body, %entry
-  %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
-  %arrayidx = getelementptr inbounds i32, i32* %a, i64 %indvars.iv
-  %0 = load i32, i32* %arrayidx, align 4
-  %inc = add nsw i32 %0, 1
-  store i32 %inc, i32* %arrayidx, align 4
-  %indvars.iv.next = add nuw nsw i64 %indvars.iv, 1
-  %exitcond = icmp eq i64 %indvars.iv.next, 64
-  br i1 %exitcond, label %for.end, label %for.body, !llvm.loop !3
-
-for.end:                                          ; preds = %for.body
-  ret void
-}
-
 ; #pragma clang loop unroll_count(4)
 ; Loop should be unrolled 4 times.
 ;
@@ -191,20 +169,24 @@ for.end:                                          ; preds = %for.body, %entry
 
 ; #pragma clang loop unroll_count(4)
 ; Loop has a runtime trip count.  Runtime unrolling should occur and loop
-; should be duplicated (original and 4x unrolled).
+; should be duplicated (original and 4x unrolled) if remainder is allowed,
+; otherwise loop should not be unrolled.
 ;
 ; CHECK-LABEL: @runtime_loop_with_count4(
 ; CHECK: for.body
 ; CHECK: store
-; CHECK: store
-; CHECK: store
-; CHECK: store
+; REM: store
+; REM: store
+; REM: store
 ; CHECK-NOT: store
 ; CHECK: br i1
-; CHECK: for.body.epil:
-; CHECK: store
+; REM: for.body.epil:
+; REM: store
+; NOREM-NOT: for.body.epil:
+; NOREM-NOT: store
 ; CHECK-NOT: store
-; CHECK: br i1
+; REM: br i1
+; NOREM-NOT: br i1
 define void @runtime_loop_with_count4(i32* nocapture %a, i32 %b) {
 entry:
   %cmp3 = icmp sgt i32 %b, 0
@@ -307,24 +289,27 @@ for.end:                                          ; preds = %for.body
 
 ; #pragma clang loop unroll(enable)
 ; Loop has a runtime trip count and should be runtime unrolled and duplicated
-; (original and 8x).
+; (original and 8x) if remainder is allowed, otherwise it should not be
+; unrolled.
 ;
 ; CHECK-LABEL: @runtime_loop_with_enable(
 ; CHECK: for.body:
 ; CHECK: store i32
-; CHECK: store i32
-; CHECK: store i32
-; CHECK: store i32
-; CHECK: store i32
-; CHECK: store i32
-; CHECK: store i32
-; CHECK: store i32
+; REM: store i32
+; REM: store i32
+; REM: store i32
+; REM: store i32
+; REM: store i32
+; REM: store i32
+; REM: store i32
 ; CHECK-NOT: store i32
 ; CHECK: br i1
-; CHECK: for.body.epil:
-; CHECK: store
+; REM: for.body.epil:
+; NOREM-NOT: for.body.epil:
+; REM: store
 ; CHECK-NOT: store
-; CHECK: br i1
+; REM: br i1
+; NOREM-NOT: br i1
 define void @runtime_loop_with_enable(i32* nocapture %a, i32 %b) {
 entry:
   %cmp3 = icmp sgt i32 %b, 0
@@ -348,19 +333,22 @@ for.end:                                          ; preds = %for.body, %entry
 
 ; #pragma clang loop unroll_count(3)
 ; Loop has a runtime trip count.  Runtime unrolling should occur and loop
-; should be duplicated (original and 3x unrolled).
+; should be duplicated (original and 3x unrolled) if remainder is allowed,
+; otherwise it should not be unrolled.
 ;
 ; CHECK-LABEL: @runtime_loop_with_count3(
 ; CHECK: for.body
 ; CHECK: store
-; CHECK: store
-; CHECK: store
+; REM: store
+; REM: store
 ; CHECK-NOT: store
 ; CHECK: br i1
-; CHECK: for.body.epil:
-; CHECK: store
+; REM: for.body.epil:
+; REM: store
+; NOREM-NOT: for.body.epil:
+; NOREM-NOT: store
 ; CHECK-NOT: store
-; CHECK: br i1
+; REM: br i1
 define void @runtime_loop_with_count3(i32* nocapture %a, i32 %b) {
 entry:
   %cmp3 = icmp sgt i32 %b, 0

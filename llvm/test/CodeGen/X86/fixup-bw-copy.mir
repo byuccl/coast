@@ -38,119 +38,105 @@
 
 ---
 name:            test_movb_killed
-allVRegsAllocated: true
-isSSA:           false
 tracksRegLiveness: true
 liveins:
-  - { reg: '%edi' }
+  - { reg: '$edi' }
 body:             |
   bb.0 (%ir-block.0):
-    liveins: %edi
+    liveins: $edi
 
-    ; CHECK: %eax = MOV32rr undef %edi, implicit %dil
-    %al = MOV8rr killed %dil
-    RETQ killed %al
+    ; CHECK: $eax = MOV32rr undef $edi, implicit $dil
+    $al = MOV8rr killed $dil
+    RETQ killed $al
 
 ...
 
 ---
 name:            test_movb_impuse
-allVRegsAllocated: true
-isSSA:           false
 tracksRegLiveness: true
 liveins:
-  - { reg: '%edi' }
+  - { reg: '$edi' }
 body:             |
   bb.0 (%ir-block.0):
-    liveins: %edi
+    liveins: $edi
 
-    ; CHECK: %eax = MOV32rr undef %edi, implicit %dil
-    %al = MOV8rr %dil, implicit %edi
-    RETQ killed %al
+    ; CHECK: $eax = MOV32rr undef $edi, implicit $dil
+    $al = MOV8rr $dil, implicit $edi
+    RETQ killed $al
 
 ...
 
 ---
 name:            test_movb_impdef_gr64
-allVRegsAllocated: true
-isSSA:           false
 tracksRegLiveness: true
 liveins:
-  - { reg: '%edi' }
+  - { reg: '$edi' }
 body:             |
   bb.0 (%ir-block.0):
-    liveins: %edi
+    liveins: $edi
 
-    ; CHECK: %eax = MOV32rr undef %edi, implicit %dil, implicit-def %rax
-    %al = MOV8rr %dil, implicit-def %rax
-    RETQ killed %al
+    ; CHECK: $eax = MOV32rr undef $edi, implicit $dil, implicit-def $rax
+    $al = MOV8rr $dil, implicit-def $rax
+    RETQ killed $al
 
 ...
 
 ---
 name:            test_movb_impdef_gr32
-allVRegsAllocated: true
-isSSA:           false
 tracksRegLiveness: true
 liveins:
-  - { reg: '%edi' }
+  - { reg: '$edi' }
 body:             |
   bb.0 (%ir-block.0):
-    liveins: %edi
+    liveins: $edi
 
-    ; CHECK: %eax = MOV32rr undef %edi, implicit %dil
-    %al = MOV8rr %dil, implicit-def %eax
-    RETQ killed %al
+    ; CHECK: $eax = MOV32rr undef $edi, implicit $dil
+    $al = MOV8rr $dil, implicit-def $eax
+    RETQ killed $al
 
 ...
 
 ---
 name:            test_movb_impdef_gr16
-allVRegsAllocated: true
-isSSA:           false
 tracksRegLiveness: true
 liveins:
-  - { reg: '%edi' }
+  - { reg: '$edi' }
 body:             |
   bb.0 (%ir-block.0):
-    liveins: %edi
+    liveins: $edi
 
-    ; CHECK: %eax = MOV32rr undef %edi, implicit %dil
-    %al = MOV8rr %dil, implicit-def %ax
-    RETQ killed %al
+    ; CHECK: $eax = MOV32rr undef $edi, implicit $dil
+    $al = MOV8rr $dil, implicit-def $ax
+    RETQ killed $al
 
 ...
 
 ---
 name:            test_movw_impdef_gr32
-allVRegsAllocated: true
-isSSA:           false
 tracksRegLiveness: true
 liveins:
-  - { reg: '%edi' }
+  - { reg: '$edi' }
 body:             |
   bb.0 (%ir-block.0):
-    liveins: %edi
+    liveins: $edi
 
-    ; CHECK: %eax = MOV32rr undef %edi, implicit %di
-    %ax = MOV16rr %di, implicit-def %eax
-    RETQ killed %ax
+    ; CHECK: $eax = MOV32rr undef $edi, implicit $di
+    $ax = MOV16rr $di, implicit-def $eax
+    RETQ killed $ax
 
 ...
 
 ---
 name:            test_movw_impdef_gr64
-allVRegsAllocated: true
-isSSA:           false
 tracksRegLiveness: true
 liveins:
-  - { reg: '%edi' }
+  - { reg: '$edi' }
 body:             |
   bb.0 (%ir-block.0):
-    liveins: %edi
+    liveins: $edi
 
-    ; CHECK: %eax = MOV32rr undef %edi, implicit %di, implicit-def %rax
-    %ax = MOV16rr %di, implicit-def %rax
-    RETQ killed %ax
+    ; CHECK: $eax = MOV32rr undef $edi, implicit $di, implicit-def $rax
+    $ax = MOV16rr $di, implicit-def $rax
+    RETQ killed $ax
 
 ...

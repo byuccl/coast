@@ -17,21 +17,15 @@
 
 #include "MSP430.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/Target/TargetLowering.h"
+#include "llvm/CodeGen/TargetLowering.h"
 
 namespace llvm {
-
-  class MSP430Subtarget;
-
   namespace MSP430ISD {
     enum NodeType : unsigned {
       FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
       /// Return with a flag operand. Operand 0 is the chain operand.
       RET_FLAG,
-
-      /// Return with a flag operand. Operand 0 is the chain operand.
-      RETA_FLAG,
 
       /// Same as RET_FLAG, but used for returning from ISRs.
       RETI_FLAG,
@@ -45,10 +39,6 @@ namespace llvm {
       /// CALL - These operations represent an abstract call
       /// instruction, which includes a bunch of information.
       CALL,
-
-      /// CALL - These operations represent an abstract call
-      /// instruction, which includes a bunch of information.
-      CALLA,
 
       /// Wrapper - A wrapper node for TargetConstantPool, TargetExternalSymbol,
       /// and TargetGlobalAddress.
@@ -138,7 +128,6 @@ namespace llvm {
                                       MachineBasicBlock *BB) const;
 
   private:
-    const MSP430Subtarget *Subtarget;
     SDValue LowerCCCCallTo(SDValue Chain, SDValue Callee,
                            CallingConv::ID CallConv, bool isVarArg,
                            bool isTailCall,
@@ -168,6 +157,12 @@ namespace llvm {
     SDValue
       LowerCall(TargetLowering::CallLoweringInfo &CLI,
                 SmallVectorImpl<SDValue> &InVals) const override;
+
+    bool CanLowerReturn(CallingConv::ID CallConv,
+                        MachineFunction &MF,
+                        bool IsVarArg,
+                        const SmallVectorImpl<ISD::OutputArg> &Outs,
+                        LLVMContext &Context) const override;
 
     SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                         const SmallVectorImpl<ISD::OutputArg> &Outs,

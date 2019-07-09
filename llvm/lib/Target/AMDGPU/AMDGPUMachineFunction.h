@@ -10,44 +10,69 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_AMDGPUMACHINEFUNCTION_H
 #define LLVM_LIB_TARGET_AMDGPU_AMDGPUMACHINEFUNCTION_H
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include <map>
 
 namespace llvm {
 
-class AMDGPUMachineFunction : public MachineFunctionInfo {
-  uint64_t KernArgSize;
-  unsigned MaxKernArgAlign;
+class GCNSubtarget;
 
-  virtual void anchor();
+class AMDGPUMachineFunction : public MachineFunctionInfo {
+  /// A map to keep track of local memory objects and their offsets within the
+  /// local memory space.
+  SmallDenseMap<const GlobalValue *, unsigned, 4> LocalMemoryObjects;
+
+protected:
+  uint64_t ExplicitKernArgSize; // Cache for this.
+  unsigned MaxKernArgAlign; // Cache for this.
+
+  /// Number of bytes in the LDS that are being used.
+  unsigned LDSSize;
+
+  // Kernels + shaders. i.e. functions called by the driver and not called
+  // by other functions.
+  bool IsEntryFunction;
+
+  bool NoSignedZerosFPMath;
+
+  // Function may be memory bound.
+  bool MemoryBound;
+
+  // Kernel may need limited waves per EU for better performance.
+  bool WaveLimiter;
 
 public:
   AMDGPUMachineFunction(const MachineFunction &MF);
 
-  uint64_t allocateKernArg(uint64_t Size, unsigned Align) {
-    assert(isPowerOf2_32(Align));
-    KernArgSize = alignTo(KernArgSize, Align);
-
-    uint64_t Result = KernArgSize;
-    KernArgSize += Size;
-
-    MaxKernArgAlign = std::max(Align, MaxKernArgAlign);
-    return Result;
+  uint64_t getExplicitKernArgSize() const {
+    return ExplicitKernArgSize;
   }
 
-  /// A map to keep track of local memory objects and their offsets within
-  /// the local memory space.
-  std::map<const GlobalValue *, unsigned> LocalMemoryObjects;
-  /// Number of bytes in the LDS that are being used.
-  unsigned LDSSize;
+  unsigned getMaxKernArgAlign() const {
+    return MaxKernArgAlign;
+  }
 
-  /// Start of implicit kernel args
-  unsigned ABIArgOffset;
+  unsigned getLDSSize() const {
+    return LDSSize;
+  }
 
-  bool isKernel() const;
+  bool isEntryFunction() const {
+    return IsEntryFunction;
+  }
 
-  unsigned ScratchSize;
-  bool IsKernel;
+  bool hasNoSignedZerosFPMath() const {
+    return NoSignedZerosFPMath;
+  }
+
+  bool isMemoryBound() const {
+    return MemoryBound;
+  }
+
+  bool needsWaveLimiter() const {
+    return WaveLimiter;
+  }
+
+  unsigned allocateLDSGlobal(const DataLayout &DL, const GlobalValue &GV);
 };
 
 }

@@ -80,9 +80,10 @@ void Mips16DAGToDAGISel::initGlobalBaseReg(MachineFunction &MF) {
   V1 = RegInfo.createVirtualRegister(RC);
   V2 = RegInfo.createVirtualRegister(RC);
 
-  BuildMI(MBB, I, DL, TII.get(Mips::GotPrologue16), V0)
-      .addReg(V1, RegState::Define)
-      .addExternalSymbol("_gp_disp", MipsII::MO_ABS_HI)
+
+  BuildMI(MBB, I, DL, TII.get(Mips::LiRxImmX16), V0)
+      .addExternalSymbol("_gp_disp", MipsII::MO_ABS_HI);
+  BuildMI(MBB, I, DL, TII.get(Mips::AddiuRxPcImmX16), V1)
       .addExternalSymbol("_gp_disp", MipsII::MO_ABS_LO);
 
   BuildMI(MBB, I, DL, TII.get(Mips::SllX16), V2).addReg(V0).addImm(16);
@@ -190,41 +191,6 @@ bool Mips16DAGToDAGISel::trySelect(SDNode *Node) {
   switch (Opcode) {
   default:
     break;
-
-  case ISD::SUBE:
-  case ISD::ADDE: {
-    SDValue InFlag = Node->getOperand(2), CmpLHS;
-    unsigned Opc = InFlag.getOpcode();
-    (void)Opc;
-    assert(((Opc == ISD::ADDC || Opc == ISD::ADDE) ||
-            (Opc == ISD::SUBC || Opc == ISD::SUBE)) &&
-           "(ADD|SUB)E flag operand must come from (ADD|SUB)C/E insn");
-
-    unsigned MOp;
-    if (Opcode == ISD::ADDE) {
-      CmpLHS = InFlag.getValue(0);
-      MOp = Mips::AdduRxRyRz16;
-    } else {
-      CmpLHS = InFlag.getOperand(0);
-      MOp = Mips::SubuRxRyRz16;
-    }
-
-    SDValue Ops[] = {CmpLHS, InFlag.getOperand(1)};
-
-    SDValue LHS = Node->getOperand(0);
-    SDValue RHS = Node->getOperand(1);
-
-    EVT VT = LHS.getValueType();
-
-    unsigned Sltu_op = Mips::SltuRxRyRz16;
-    SDNode *Carry = CurDAG->getMachineNode(Sltu_op, DL, VT, Ops);
-    unsigned Addu_op = Mips::AdduRxRyRz16;
-    SDNode *AddCarry =
-        CurDAG->getMachineNode(Addu_op, DL, VT, SDValue(Carry, 0), RHS);
-
-    CurDAG->SelectNodeTo(Node, MOp, VT, MVT::Glue, LHS, SDValue(AddCarry, 0));
-    return true;
-  }
 
   /// Mul with two results
   case ISD::SMUL_LOHI:

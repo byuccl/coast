@@ -1,4 +1,5 @@
 ; RUN: opt < %s -functionattrs -S | FileCheck %s
+; RUN: opt < %s -passes=function-attrs -S | FileCheck %s
 
 ; CHECK: define i32* @a(i32** nocapture readonly %p)
 define i32* @a(i32** %p) {
@@ -14,7 +15,7 @@ define i32* @b(i32 *%q) {
 	ret i32* %tmp
 }
 
-; CHECK: define i32* @c(i32* readnone %r)
+; CHECK: define i32* @c(i32* readnone returned %r)
 @g = global i32 0
 define i32* @c(i32 *%r) {
 	%a = icmp eq i32* %r, null

@@ -1,4 +1,4 @@
-//- CFLSteensAliasAnalysis.cpp - Unification-based Alias Analysis ---*- C++-*-//
+//===- CFLSteensAliasAnalysis.cpp - Unification-based Alias Analysis ------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -36,23 +36,25 @@
 // FunctionPasses to run concurrently.
 
 #include "llvm/Analysis/CFLSteensAliasAnalysis.h"
+#include "AliasAnalysisSummary.h"
 #include "CFLGraph.h"
 #include "StratifiedSets.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cassert>
+#include <limits>
 #include <memory>
-#include <tuple>
+#include <utility>
 
 using namespace llvm;
 using namespace llvm::cflaa;
@@ -63,7 +65,7 @@ CFLSteensAAResult::CFLSteensAAResult(const TargetLibraryInfo &TLI)
     : AAResultBase(), TLI(TLI) {}
 CFLSteensAAResult::CFLSteensAAResult(CFLSteensAAResult &&Arg)
     : AAResultBase(std::move(Arg)), TLI(Arg.TLI) {}
-CFLSteensAAResult::~CFLSteensAAResult() {}
+CFLSteensAAResult::~CFLSteensAAResult() = default;
 
 /// Information we have about a function and would like to keep around.
 class CFLSteensAAResult::FunctionInfo {
@@ -77,11 +79,9 @@ public:
   const StratifiedSets<InstantiatedValue> &getStratifiedSets() const {
     return Sets;
   }
+
   const AliasSummary &getAliasSummary() const { return Summary; }
 };
-
-/// Try to go from a Value* to a Function*. Never returns nullptr.
-static Optional<Function *> parentFunctionOfValue(Value *);
 
 const StratifiedIndex StratifiedLink::SetSentinel =
     std::numeric_limits<StratifiedIndex>::max();
@@ -91,19 +91,6 @@ const StratifiedIndex StratifiedLink::SetSentinel =
 //===----------------------------------------------------------------------===//
 
 /// Determines whether it would be pointless to add the given Value to our sets.
-static bool canSkipAddingToSets(Value *Val);
-
-static Optional<Function *> parentFunctionOfValue(Value *Val) {
-  if (auto *Inst = dyn_cast<Instruction>(Val)) {
-    auto *Bb = Inst->getParent();
-    return Bb->getParent();
-  }
-
-  if (auto *Arg = dyn_cast<Argument>(Val))
-    return Arg->getParent();
-  return None;
-}
-
 static bool canSkipAddingToSets(Value *Val) {
   // Constants can share instances, which may falsely unify multiple
   // sets, e.g. in
@@ -153,7 +140,7 @@ CFLSteensAAResult::FunctionInfo::FunctionInfo(
       if (Itr != InterfaceMap.end()) {
         if (CurrValue != Itr->second)
           Summary.RetParamRelations.push_back(
-              ExternalRelation{CurrValue, Itr->second});
+              ExternalRelation{CurrValue, Itr->second, UnknownOffset});
         break;
       }
 
@@ -248,7 +235,7 @@ void CFLSteensAAResult::scan(Function *Fn) {
   auto FunInfo = buildSetsFrom(Fn);
   Cache[Fn] = std::move(FunInfo);
 
-  Handles.push_front(FunctionHandle(Fn, this));
+  Handles.emplace_front(Fn, this);
 }
 
 void CFLSteensAAResult::evict(Function *Fn) { Cache.erase(Fn); }
@@ -284,22 +271,23 @@ AliasResult CFLSteensAAResult::query(const MemoryLocation &LocA,
     return NoAlias;
 
   Function *Fn = nullptr;
-  auto MaybeFnA = parentFunctionOfValue(ValA);
-  auto MaybeFnB = parentFunctionOfValue(ValB);
-  if (!MaybeFnA.hasValue() && !MaybeFnB.hasValue()) {
+  Function *MaybeFnA = const_cast<Function *>(parentFunctionOfValue(ValA));
+  Function *MaybeFnB = const_cast<Function *>(parentFunctionOfValue(ValB));
+  if (!MaybeFnA && !MaybeFnB) {
     // The only times this is known to happen are when globals + InlineAsm are
     // involved
-    DEBUG(dbgs()
-          << "CFLSteensAA: could not extract parent function information.\n");
+    LLVM_DEBUG(
+        dbgs()
+        << "CFLSteensAA: could not extract parent function information.\n");
     return MayAlias;
   }
 
-  if (MaybeFnA.hasValue()) {
-    Fn = *MaybeFnA;
-    assert((!MaybeFnB.hasValue() || *MaybeFnB == *MaybeFnA) &&
+  if (MaybeFnA) {
+    Fn = MaybeFnA;
+    assert((!MaybeFnB || MaybeFnB == MaybeFnA) &&
            "Interprocedural queries not supported");
   } else {
-    Fn = *MaybeFnB;
+    Fn = MaybeFnB;
   }
 
   assert(Fn != nullptr);
@@ -341,81 +329,9 @@ AliasResult CFLSteensAAResult::query(const MemoryLocation &LocA,
   return NoAlias;
 }
 
-ModRefInfo CFLSteensAAResult::getArgModRefInfo(ImmutableCallSite CS,
-                                               unsigned ArgIdx) {
-  if (auto CalledFunc = CS.getCalledFunction()) {
-    auto &MaybeInfo = ensureCached(const_cast<Function *>(CalledFunc));
-    if (!MaybeInfo.hasValue())
-      return MRI_ModRef;
-    auto &RetParamAttributes = MaybeInfo->getAliasSummary().RetParamAttributes;
-    auto &RetParamRelations = MaybeInfo->getAliasSummary().RetParamRelations;
+AnalysisKey CFLSteensAA::Key;
 
-    bool ArgAttributeIsWritten =
-        std::any_of(RetParamAttributes.begin(), RetParamAttributes.end(),
-                    [ArgIdx](const ExternalAttribute &ExtAttr) {
-                      return ExtAttr.IValue.Index == ArgIdx + 1;
-                    });
-    bool ArgIsAccessed =
-        std::any_of(RetParamRelations.begin(), RetParamRelations.end(),
-                    [ArgIdx](const ExternalRelation &ExtRelation) {
-                      return ExtRelation.To.Index == ArgIdx + 1 ||
-                             ExtRelation.From.Index == ArgIdx + 1;
-                    });
-
-    return (!ArgIsAccessed && !ArgAttributeIsWritten) ? MRI_NoModRef
-                                                      : MRI_ModRef;
-  }
-
-  return MRI_ModRef;
-}
-
-FunctionModRefBehavior
-CFLSteensAAResult::getModRefBehavior(ImmutableCallSite CS) {
-  // If we know the callee, try analyzing it
-  if (auto CalledFunc = CS.getCalledFunction())
-    return getModRefBehavior(CalledFunc);
-
-  // Otherwise, be conservative
-  return FMRB_UnknownModRefBehavior;
-}
-
-FunctionModRefBehavior CFLSteensAAResult::getModRefBehavior(const Function *F) {
-  assert(F != nullptr);
-
-  // TODO: Remove the const_cast
-  auto &MaybeInfo = ensureCached(const_cast<Function *>(F));
-  if (!MaybeInfo.hasValue())
-    return FMRB_UnknownModRefBehavior;
-  auto &RetParamAttributes = MaybeInfo->getAliasSummary().RetParamAttributes;
-  auto &RetParamRelations = MaybeInfo->getAliasSummary().RetParamRelations;
-
-  // First, if any argument is marked Escpaed, Unknown or Global, anything may
-  // happen to them and thus we can't draw any conclusion.
-  if (!RetParamAttributes.empty())
-    return FMRB_UnknownModRefBehavior;
-
-  // Currently we don't (and can't) distinguish reads from writes in
-  // RetParamRelations. All we can say is whether there may be memory access or
-  // not.
-  if (RetParamRelations.empty())
-    return FMRB_DoesNotAccessMemory;
-
-  // Check if something beyond argmem gets touched.
-  bool AccessArgMemoryOnly =
-      std::all_of(RetParamRelations.begin(), RetParamRelations.end(),
-                  [](const ExternalRelation &ExtRelation) {
-                    // Both DerefLevels has to be 0, since we don't know which
-                    // one is a read and which is a write.
-                    return ExtRelation.From.DerefLevel == 0 &&
-                           ExtRelation.To.DerefLevel == 0;
-                  });
-  return AccessArgMemoryOnly ? FMRB_OnlyAccessesArgumentPointees
-                             : FMRB_UnknownModRefBehavior;
-}
-
-char CFLSteensAA::PassID;
-
-CFLSteensAAResult CFLSteensAA::run(Function &F, AnalysisManager<Function> &AM) {
+CFLSteensAAResult CFLSteensAA::run(Function &F, FunctionAnalysisManager &AM) {
   return CFLSteensAAResult(AM.getResult<TargetLibraryAnalysis>(F));
 }
 

@@ -1,12 +1,20 @@
 set(LLVM_LINK_COMPONENTS
   AsmPrinter
+  CodeGen
+  Core
+  MC
+  SelectionDAG
   Support
-  )
-
-set(CodeGenSources
-  DIEHashTest.cpp
+  Target
   )
 
 add_llvm_unittest(CodeGenTests
-  ${CodeGenSources}
+  DIEHashTest.cpp
+  LowLevelTypeTest.cpp
+  MachineInstrBundleIteratorTest.cpp
+  MachineInstrTest.cpp
+  MachineOperandTest.cpp
+  ScalableVectorMVTsTest.cpp
   )
+
+add_subdirectory(GlobalISel)

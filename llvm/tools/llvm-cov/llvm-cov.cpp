@@ -14,50 +14,51 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
-#include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_ostream.h"
 #include <string>
 
 using namespace llvm;
 
-/// \brief The main entry point for the 'show' subcommand.
+/// The main entry point for the 'show' subcommand.
 int showMain(int argc, const char *argv[]);
 
-/// \brief The main entry point for the 'report' subcommand.
+/// The main entry point for the 'report' subcommand.
 int reportMain(int argc, const char *argv[]);
 
-/// \brief The main entry point for the 'convert-for-testing' subcommand.
+/// The main entry point for the 'export' subcommand.
+int exportMain(int argc, const char *argv[]);
+
+/// The main entry point for the 'convert-for-testing' subcommand.
 int convertForTestingMain(int argc, const char *argv[]);
 
-/// \brief The main entry point for the gcov compatible coverage tool.
+/// The main entry point for the gcov compatible coverage tool.
 int gcovMain(int argc, const char *argv[]);
 
-/// \brief Top level help.
+/// Top level help.
 static int helpMain(int argc, const char *argv[]) {
-  errs() << "Usage: llvm-cov {gcov|report|show} [OPTION]...\n\n"
+  errs() << "Usage: llvm-cov {export|gcov|report|show} [OPTION]...\n\n"
          << "Shows code coverage information.\n\n"
          << "Subcommands:\n"
+         << "  export: Export instrprof file to structured format.\n"
          << "  gcov:   Work with the gcov format.\n"
-         << "  show:   Annotate source files using instrprof style coverage.\n"
-         << "  report: Summarize instrprof style coverage information.\n";
+         << "  report: Summarize instrprof style coverage information.\n"
+         << "  show:   Annotate source files using instrprof style coverage.\n";
+
   return 0;
 }
 
-/// \brief Top level version information.
+/// Top level version information.
 static int versionMain(int argc, const char *argv[]) {
   cl::PrintVersionMessage();
   return 0;
 }
 
 int main(int argc, const char **argv) {
-  // Print a stack trace if we signal out.
-  sys::PrintStackTraceOnErrorSignal(argv[0]);
-  PrettyStackTraceProgram X(argc, argv);
-  llvm_shutdown_obj Y; // Call llvm_shutdown() on exit.
+  InitLLVM X(argc, argv);
 
   // If argv[0] is or ends with 'gcov', always be gcov compatible
   if (sys::path::stem(argv[0]).endswith_lower("gcov"))
@@ -68,6 +69,7 @@ int main(int argc, const char **argv) {
     typedef int (*MainFunction)(int, const char *[]);
     MainFunction Func = StringSwitch<MainFunction>(argv[1])
                             .Case("convert-for-testing", convertForTestingMain)
+                            .Case("export", exportMain)
                             .Case("gcov", gcovMain)
                             .Case("report", reportMain)
                             .Case("show", showMain)

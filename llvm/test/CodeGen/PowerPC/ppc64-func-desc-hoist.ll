@@ -1,5 +1,5 @@
-; RUN: llc -mcpu=a2 < %s | FileCheck %s -check-prefix=INVFUNCDESC
-; RUN: llc -mcpu=a2 -mattr=-invariant-function-descriptors < %s | FileCheck %s -check-prefix=NONINVFUNCDESC
+; RUN: llc -verify-machineinstrs -mcpu=a2 < %s | FileCheck %s -check-prefix=INVFUNCDESC
+; RUN: llc -verify-machineinstrs -mcpu=a2 -mattr=-invariant-function-descriptors < %s | FileCheck %s -check-prefix=NONINVFUNCDESC
 target datalayout = "E-m:e-i64:64-n32:64"
 target triple = "powerpc64-unknown-linux-gnu"
 
@@ -15,7 +15,6 @@ entry:
 ; INVFUNCDESC-DAG: ld [[REG3:[0-9]+]], 0(3)
 
 ; INVFUNCDESC: %for.body
-; INVFUNCDESC: std 2, 40(1)
 ; INVFUNCDESC-DAG: mtctr [[REG3]]
 ; INVFUNCDESC-DAG: mr 11, [[REG2]]
 ; INVFUNCDESC-DAG: mr 2, [[REG1]]
@@ -24,7 +23,6 @@ entry:
 
 ; NONINVFUNCDESC-LABEL: @bar
 ; NONINVFUNCDESC: %for.body
-; NONINVFUNCDESC: std 2, 40(1)
 ; NONINVFUNCDESC-DAG: ld 3, 0(30)
 ; NONINVFUNCDESC-DAG: ld 11, 16(30)
 ; NONINVFUNCDESC-DAG: ld 2, 8(30)

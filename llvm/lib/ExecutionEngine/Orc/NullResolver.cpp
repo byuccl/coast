@@ -14,12 +14,23 @@
 namespace llvm {
 namespace orc {
 
-RuntimeDyld::SymbolInfo NullResolver::findSymbol(const std::string &Name) {
+SymbolFlagsMap NullResolver::lookupFlags(const SymbolNameSet &Symbols) {
+  return SymbolFlagsMap();
+}
+
+SymbolNameSet
+NullResolver::lookup(std::shared_ptr<AsynchronousSymbolQuery> Query,
+                     SymbolNameSet Symbols) {
+  assert(Symbols.empty() && "Null resolver: Symbols must be empty");
+  return Symbols;
+}
+
+JITSymbol NullLegacyResolver::findSymbol(const std::string &Name) {
   llvm_unreachable("Unexpected cross-object symbol reference");
 }
 
-RuntimeDyld::SymbolInfo
-NullResolver::findSymbolInLogicalDylib(const std::string &Name) {
+JITSymbol
+NullLegacyResolver::findSymbolInLogicalDylib(const std::string &Name) {
   llvm_unreachable("Unexpected cross-object symbol reference");
 }
 

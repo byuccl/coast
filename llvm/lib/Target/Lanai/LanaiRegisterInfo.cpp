@@ -20,11 +20,11 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetInstrInfo.h"
 
 #define GET_REGINFO_TARGET_DESC
 #include "LanaiGenRegisterInfo.inc"
@@ -146,13 +146,13 @@ void LanaiRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
 
-  int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex) +
+  int Offset = MF.getFrameInfo().getObjectOffset(FrameIndex) +
                MI.getOperand(FIOperandNum + 1).getImm();
 
   // Addressable stack objects are addressed using neg. offsets from fp
   // or pos. offsets from sp/basepointer
   if (!HasFP || (needsStackRealignment(MF) && FrameIndex >= 0))
-    Offset += MF.getFrameInfo()->getStackSize();
+    Offset += MF.getFrameInfo().getStackSize();
 
   unsigned FrameReg = getFrameRegister(MF);
   if (FrameIndex >= 0) {
@@ -246,10 +246,10 @@ void LanaiRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 }
 
 bool LanaiRegisterInfo::hasBasePointer(const MachineFunction &MF) const {
-  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
   // When we need stack realignment and there are dynamic allocas, we can't
   // reference off of the stack pointer, so we reserve a base pointer.
-  if (needsStackRealignment(MF) && MFI->hasVarSizedObjects())
+  if (needsStackRealignment(MF) && MFI.hasVarSizedObjects())
     return true;
 
   return false;
@@ -263,22 +263,6 @@ LanaiRegisterInfo::getFrameRegister(const MachineFunction & /*MF*/) const {
 }
 
 unsigned LanaiRegisterInfo::getBaseRegister() const { return Lanai::R14; }
-
-bool LanaiRegisterInfo::canRealignStack(const MachineFunction &MF) const {
-  if (!TargetRegisterInfo::canRealignStack(MF))
-    return false;
-  return true;
-}
-
-unsigned LanaiRegisterInfo::getEHExceptionRegister() const {
-  llvm_unreachable("no exception support");
-  return 0;
-}
-
-unsigned LanaiRegisterInfo::getEHHandlerRegister() const {
-  llvm_unreachable("no exception support");
-  return 0;
-}
 
 const uint32_t *
 LanaiRegisterInfo::getCallPreservedMask(const MachineFunction & /*MF*/,

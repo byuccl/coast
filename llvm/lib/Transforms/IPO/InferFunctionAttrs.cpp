@@ -9,7 +9,6 @@
 
 #include "llvm/Transforms/IPO/InferFunctionAttrs.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -34,7 +33,7 @@ static bool inferAllPrototypeAttributes(Module &M,
 }
 
 PreservedAnalyses InferFunctionAttrsPass::run(Module &M,
-                                              AnalysisManager<Module> &AM) {
+                                              ModuleAnalysisManager &AM) {
   auto &TLI = AM.getResult<TargetLibraryAnalysis>(M);
 
   if (!inferAllPrototypeAttributes(M, TLI))

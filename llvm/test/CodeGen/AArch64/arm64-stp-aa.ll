@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=arm64 -enable-misched=false -aarch64-stp-suppress=false -verify-machineinstrs | FileCheck %s
+; RUN: llc < %s -mtriple=arm64-eabi -enable-misched=false -aarch64-enable-stp-suppress=false -verify-machineinstrs | FileCheck %s
 
 ; The next set of tests makes sure we can combine the second instruction into
 ; the first.
@@ -112,7 +112,7 @@ define double @stp_double_aa_after(double %d0, double %a, double %b, double* noc
 
 ; Check that the stores %c and %d are paired after the fadd instruction,
 ; and then the stores %a and %d are paired after proving that they do not
-; depend on the the (%c, %d) pair.
+; depend on the (%c, %d) pair.
 ;
 ; CHECK-LABEL: st1:
 ; CHECK: stp q0, q1, [x{{[0-9]+}}]

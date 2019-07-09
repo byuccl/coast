@@ -1,20 +1,41 @@
-; RUN: opt -S -lowertypetests < %s | FileCheck %s
+; RUN: opt -S -lowertypetests -mtriple=x86_64-unknown-linux-gnu < %s | FileCheck --check-prefixes=CHECK,X64 %s
+; RUN: opt -S -lowertypetests -mtriple=wasm32-unknown-unknown < %s | FileCheck --check-prefixes=CHECK,WASM32 %s
 
 ; Tests that we correctly handle external references, including the case where
 ; all functions in a bitset are external references.
 
-target triple = "x86_64-unknown-linux-gnu"
+; WASM32: private constant [0 x i8] zeroinitializer
 
-declare !type !0 void @foo()
+; WASM32: declare !type !{{[0-9]+}} !wasm.index !{{[0-9]+}} void @foo1()
+declare !type !0 void @foo1()
+; WASM32: declare !type !{{[0-9]+}} void @foo2()
+declare !type !1 void @foo2()
 
-; CHECK: @[[JT:.*]] = private constant [1 x <{ i8, i32, i8, i8, i8 }>] [<{ i8, i32, i8, i8, i8 }> <{ i8 -23, i32 trunc (i64 sub (i64 sub (i64 ptrtoint (void ()* @foo to i64), i64 ptrtoint ([1 x <{ i8, i32, i8, i8, i8 }>]* @[[JT]] to i64)), i64 5) to i32), i8 -52, i8 -52, i8 -52 }>], section ".text"
-
+; CHECK-LABEL: @bar
 define i1 @bar(i8* %ptr) {
-  ; CHECK: icmp eq i64 {{.*}}, ptrtoint ([1 x <{ i8, i32, i8, i8, i8 }>]* @[[JT]] to i64)
-  %p = call i1 @llvm.type.test(i8* %ptr, metadata !"void")
+  ; CHECK: %[[ICMP:[0-9]+]] = icmp eq
+  ; CHECK: ret i1 %[[ICMP]]
+  %p = call i1 @llvm.type.test(i8* %ptr, metadata !"type1")
   ret i1 %p
+}
+
+; CHECK-LABEL: @baz
+define i1 @baz(i8* %ptr) {
+  ; CHECK: ret i1 false
+  %p = call i1 @llvm.type.test(i8* %ptr, metadata !"type2")
+  ret i1 %p
+}
+
+; CHECK-LABEL: @addrtaken
+define void()* @addrtaken() {
+  ; X64: ret void ()* @[[JT:.*]]
+  ret void()* @foo1
 }
 
 declare i1 @llvm.type.test(i8* %ptr, metadata %bitset) nounwind readnone
 
-!0 = !{i64 0, !"void"}
+!0 = !{i64 0, !"type1"}
+!1 = !{i64 0, !"type2"}
+
+; X64: define private void @[[JT]]() #{{.*}} align {{.*}} {
+; X64:   call void asm sideeffect "jmp ${0:c}@plt\0Aint3\0Aint3\0Aint3\0A", "s"(void ()* @foo1)

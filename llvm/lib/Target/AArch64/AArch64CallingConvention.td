@@ -23,6 +23,7 @@ class CCIfBigEndian<CCAction A> :
 //===----------------------------------------------------------------------===//
 
 def CC_AArch64_AAPCS : CallingConv<[
+  CCIfType<[iPTR], CCBitConvertToType<i64>>,
   CCIfType<[v2f32], CCBitConvertToType<v2i32>>,
   CCIfType<[v2f64, v4f32], CCBitConvertToType<v2i64>>,
 
@@ -47,6 +48,9 @@ def CC_AArch64_AAPCS : CallingConv<[
 
   // Pass SwiftSelf in a callee saved register.
   CCIfSwiftSelf<CCIfType<[i64], CCAssignToRegWithShadow<[X20], [W20]>>>,
+
+  // A SwiftError is passed in X21.
+  CCIfSwiftError<CCIfType<[i64], CCAssignToRegWithShadow<[X21], [W21]>>>,
 
   CCIfConsecutiveRegs<CCCustom<"CC_AArch64_Custom_Block">>,
 
@@ -86,10 +90,11 @@ def CC_AArch64_AAPCS : CallingConv<[
 ]>;
 
 def RetCC_AArch64_AAPCS : CallingConv<[
+  CCIfType<[iPTR], CCBitConvertToType<i64>>,
   CCIfType<[v2f32], CCBitConvertToType<v2i32>>,
   CCIfType<[v2f64, v4f32], CCBitConvertToType<v2i64>>,
 
-  CCIfSwiftError<CCIfType<[i64], CCAssignToRegWithShadow<[X19], [W19]>>>,
+  CCIfSwiftError<CCIfType<[i64], CCAssignToRegWithShadow<[X21], [W21]>>>,
 
   // Big endian vectors must be passed as if they were 1-element vectors so that
   // their lanes are in a consistent order.
@@ -98,6 +103,7 @@ def RetCC_AArch64_AAPCS : CallingConv<[
   CCIfBigEndian<CCIfType<[v2i64, v2f64, v4i32, v4f32, v8i16, v8f16, v16i8],
                          CCBitConvertToType<f128>>>,
 
+  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
   CCIfType<[i32], CCAssignToRegWithShadow<[W0, W1, W2, W3, W4, W5, W6, W7],
                                           [X0, X1, X2, X3, X4, X5, X6, X7]>>,
   CCIfType<[i64], CCAssignToRegWithShadow<[X0, X1, X2, X3, X4, X5, X6, X7],
@@ -115,12 +121,20 @@ def RetCC_AArch64_AAPCS : CallingConv<[
       CCAssignToReg<[Q0, Q1, Q2, Q3, Q4, Q5, Q6, Q7]>>
 ]>;
 
+// Vararg functions on windows pass floats in integer registers
+def CC_AArch64_Win64_VarArg : CallingConv<[
+  CCIfType<[f16, f32],    CCPromoteToType<f64>>,
+  CCIfType<[f64], CCBitConvertToType<i64>>,
+  CCDelegateTo<CC_AArch64_AAPCS>
+]>;
+
 
 // Darwin uses a calling convention which differs in only two ways
 // from the standard one at this level:
 //     + i128s (i.e. split i64s) don't need even registers.
 //     + Stack slots are sized as needed rather than being at least 64-bit.
 def CC_AArch64_DarwinPCS : CallingConv<[
+  CCIfType<[iPTR], CCBitConvertToType<i64>>,
   CCIfType<[v2f32], CCBitConvertToType<v2i32>>,
   CCIfType<[v2f64, v4f32, f128], CCBitConvertToType<v2i64>>,
 
@@ -134,8 +148,8 @@ def CC_AArch64_DarwinPCS : CallingConv<[
   // Pass SwiftSelf in a callee saved register.
   CCIfSwiftSelf<CCIfType<[i64], CCAssignToRegWithShadow<[X20], [W20]>>>,
 
-  // A SwiftError is passed in X19.
-  CCIfSwiftError<CCIfType<[i64], CCAssignToRegWithShadow<[X19], [W19]>>>,
+  // A SwiftError is passed in X21.
+  CCIfSwiftError<CCIfType<[i64], CCAssignToRegWithShadow<[X21], [W21]>>>,
 
   CCIfConsecutiveRegs<CCCustom<"CC_AArch64_Custom_Block">>,
 
@@ -176,6 +190,7 @@ def CC_AArch64_DarwinPCS : CallingConv<[
 ]>;
 
 def CC_AArch64_DarwinPCS_VarArg : CallingConv<[
+  CCIfType<[iPTR], CCBitConvertToType<i64>>,
   CCIfType<[v2f32], CCBitConvertToType<v2i32>>,
   CCIfType<[v2f64, v4f32, f128], CCBitConvertToType<v2i64>>,
 
@@ -243,6 +258,8 @@ def RetCC_AArch64_WebKit_JS : CallingConv<[
 // register mapping".
 
 def CC_AArch64_GHC : CallingConv<[
+  CCIfType<[iPTR], CCBitConvertToType<i64>>,
+
   // Handle all vector types as either f64 or v2f64.
   CCIfType<[v1i64, v2i32, v4i16, v8i8, v2f32], CCBitConvertToType<f64>>,
   CCIfType<[v2i64, v4i32, v8i16, v16i8, v4f32, f128], CCBitConvertToType<v2f64>>,
@@ -282,7 +299,7 @@ def CSR_AArch64_AAPCS : CalleeSavedRegs<(add LR, FP, X19, X20, X21, X22,
 def CSR_AArch64_AAPCS_ThisReturn : CalleeSavedRegs<(add CSR_AArch64_AAPCS, X0)>;
 
 def CSR_AArch64_AAPCS_SwiftError
-    : CalleeSavedRegs<(sub CSR_AArch64_AAPCS, X19)>;
+    : CalleeSavedRegs<(sub CSR_AArch64_AAPCS, X21)>;
 
 // The function used by Darwin to obtain the address of a thread-local variable
 // guarantees more than a normal AAPCS function. x16 and x17 are used on the
@@ -328,3 +345,22 @@ def CSR_AArch64_NoRegs : CalleeSavedRegs<(add)>;
 def CSR_AArch64_RT_MostRegs :  CalleeSavedRegs<(add CSR_AArch64_AAPCS,
                                                 (sequence "X%u", 9, 15))>;
 
+def CSR_AArch64_StackProbe_Windows
+    : CalleeSavedRegs<(add (sequence "X%u", 0, 15),
+                           (sequence "X%u", 18, 28), FP, SP,
+                           (sequence "Q%u", 0, 31))>;
+
+// Variants of the standard calling conventions for shadow call stack.
+// These all preserve x18 in addition to any other registers.
+def CSR_AArch64_NoRegs_SCS
+    : CalleeSavedRegs<(add CSR_AArch64_NoRegs, X18)>;
+def CSR_AArch64_AllRegs_SCS
+    : CalleeSavedRegs<(add CSR_AArch64_AllRegs, X18)>;
+def CSR_AArch64_CXX_TLS_Darwin_SCS
+    : CalleeSavedRegs<(add CSR_AArch64_CXX_TLS_Darwin, X18)>;
+def CSR_AArch64_AAPCS_SwiftError_SCS
+    : CalleeSavedRegs<(add CSR_AArch64_AAPCS_SwiftError, X18)>;
+def CSR_AArch64_RT_MostRegs_SCS
+    : CalleeSavedRegs<(add CSR_AArch64_RT_MostRegs, X18)>;
+def CSR_AArch64_AAPCS_SCS
+    : CalleeSavedRegs<(add CSR_AArch64_AAPCS, X18)>;

@@ -1,5 +1,5 @@
-; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=cortex-a9 | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-CORTEX
-; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=swift     | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-SWIFT
+; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=cortex-a9 -simplifycfg-sink-common=false | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-CORTEX
+; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=swift     -simplifycfg-sink-common=false | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-SWIFT
 ; Avoid some 's' 16-bit instruction which partially update CPSR (and add false
 ; dependency) when it isn't dependent on last CPSR defining instruction.
 ; rdar://8928208
@@ -106,7 +106,7 @@ if.then:
 
 if.else:
   store i32 3, i32* %p, align 4
-  %incdec.ptr5 = getelementptr inbounds i32, i32* %p, i32 2
+  %incdec.ptr5 = getelementptr inbounds i32, i32* %p, i32 3
   store i32 5, i32* %incdec.ptr1, align 4
   store i32 6, i32* %incdec.ptr5, align 4
   br label %if.end

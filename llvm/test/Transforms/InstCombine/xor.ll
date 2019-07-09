@@ -105,6 +105,16 @@ define i1 @test9(i8 %A) {
   ret i1 %C
 }
 
+define <2 x i1> @test9vec(<2 x i8> %a) {
+; CHECK-LABEL: @test9vec(
+; CHECK-NEXT:    [[C:%.*]] = icmp eq <2 x i8> %a, <i8 89, i8 89>
+; CHECK-NEXT:    ret <2 x i1> [[C]]
+;
+  %b = xor <2 x i8> %a, <i8 123, i8 123>
+  %c = icmp eq <2 x i8> %b, <i8 34, i8 34>
+  ret <2 x i1> %c
+}
+
 define i8 @test10(i8 %A) {
 ; CHECK-LABEL: @test10(
 ; CHECK-NEXT:    [[B:%.*]] = and i8 %A, 3
@@ -137,25 +147,14 @@ define i1 @test12(i8 %A) {
   ret i1 %c
 }
 
-define i1 @test13(i8 %A, i8 %B) {
-; CHECK-LABEL: @test13(
-; CHECK-NEXT:    [[TMP1:%.*]] = icmp ne i8 %A, %B
-; CHECK-NEXT:    ret i1 [[TMP1]]
+define <2 x i1> @test12vec(<2 x i8> %a) {
+; CHECK-LABEL: @test12vec(
+; CHECK-NEXT:    [[C:%.*]] = icmp ne <2 x i8> %a, <i8 4, i8 4>
+; CHECK-NEXT:    ret <2 x i1> [[C]]
 ;
-  %C = icmp ult i8 %A, %B
-  %D = icmp ugt i8 %A, %B
-  %E = xor i1 %C, %D
-  ret i1 %E
-}
-
-define i1 @test14(i8 %A, i8 %B) {
-; CHECK-LABEL: @test14(
-; CHECK-NEXT:    ret i1 true
-;
-  %C = icmp eq i8 %A, %B
-  %D = icmp ne i8 %B, %A
-  %E = xor i1 %C, %D
-  ret i1 %E
+  %b = xor <2 x i8> %a, <i8 4, i8 4>
+  %c = icmp ne <2 x i8> %b, zeroinitializer
+  ret <2 x i1> %c
 }
 
 define i32 @test15(i32 %A) {
@@ -168,6 +167,16 @@ define i32 @test15(i32 %A) {
   ret i32 %C
 }
 
+define <2 x i32> @test15vec(<2 x i32> %A) {
+; CHECK-LABEL: @test15vec(
+; CHECK-NEXT:    [[C:%.*]] = sub <2 x i32> zeroinitializer, [[A:%.*]]
+; CHECK-NEXT:    ret <2 x i32> [[C]]
+;
+  %B = add <2 x i32> %A, <i32 -1, i32 -1>
+  %C = xor <2 x i32> %B, <i32 -1, i32 -1>
+  ret <2 x i32> %C
+}
+
 define i32 @test16(i32 %A) {
 ; CHECK-LABEL: @test16(
 ; CHECK-NEXT:    [[C:%.*]] = sub i32 -124, %A
@@ -178,6 +187,16 @@ define i32 @test16(i32 %A) {
   ret i32 %C
 }
 
+define <2 x i32> @test16vec(<2 x i32> %A) {
+; CHECK-LABEL: @test16vec(
+; CHECK-NEXT:    [[C:%.*]] = sub <2 x i32> <i32 -124, i32 -124>, [[A:%.*]]
+; CHECK-NEXT:    ret <2 x i32> [[C]]
+;
+  %B = add <2 x i32> %A, <i32 123, i32 123>
+  %C = xor <2 x i32> %B, <i32 -1, i32 -1>
+  ret <2 x i32> %C
+}
+
 define i32 @test17(i32 %A) {
 ; CHECK-LABEL: @test17(
 ; CHECK-NEXT:    [[C:%.*]] = add i32 %A, -124
@@ -186,6 +205,16 @@ define i32 @test17(i32 %A) {
   %B = sub i32 123, %A
   %C = xor i32 %B, -1
   ret i32 %C
+}
+
+define <2 x i32> @test17vec(<2 x i32> %A) {
+; CHECK-LABEL: @test17vec(
+; CHECK-NEXT:    [[C:%.*]] = add <2 x i32> [[A:%.*]], <i32 -124, i32 -124>
+; CHECK-NEXT:    ret <2 x i32> [[C]]
+;
+  %B = sub <2 x i32> <i32 123, i32 123>, %A
+  %C = xor <2 x i32> %B, <i32 -1, i32 -1>
+  ret <2 x i32> %C
 }
 
 define i32 @test18(i32 %A) {
@@ -233,8 +262,8 @@ define i32 @test21(i1 %C, i32 %A, i32 %B) {
 
 define i32 @test22(i1 %X) {
 ; CHECK-LABEL: @test22(
-; CHECK-NEXT:    [[TMP1:%.*]] = zext i1 %X to i32
-; CHECK-NEXT:    ret i32 [[TMP1]]
+; CHECK-NEXT:    [[Z:%.*]] = zext i1 %X to i32
+; CHECK-NEXT:    ret i32 [[Z]]
 ;
   %Y = xor i1 %X, true
   %Z = zext i1 %Y to i32
@@ -246,8 +275,8 @@ define i32 @test22(i1 %X) {
 
 define i32 @fold_zext_xor_sandwich(i1 %X) {
 ; CHECK-LABEL: @fold_zext_xor_sandwich(
-; CHECK-NEXT:    [[TMP1:%.*]] = zext i1 %X to i32
-; CHECK-NEXT:    [[Q:%.*]] = xor i32 [[TMP1]], 3
+; CHECK-NEXT:    [[Z:%.*]] = zext i1 %X to i32
+; CHECK-NEXT:    [[Q:%.*]] = xor i32 [[Z]], 3
 ; CHECK-NEXT:    ret i32 [[Q]]
 ;
   %Y = xor i1 %X, true
@@ -258,8 +287,8 @@ define i32 @fold_zext_xor_sandwich(i1 %X) {
 
 define <2 x i32> @fold_zext_xor_sandwich_vec(<2 x i1> %X) {
 ; CHECK-LABEL: @fold_zext_xor_sandwich_vec(
-; CHECK-NEXT:    [[TMP1:%.*]] = zext <2 x i1> %X to <2 x i32>
-; CHECK-NEXT:    [[Q:%.*]] = xor <2 x i32> [[TMP1]], <i32 3, i32 3>
+; CHECK-NEXT:    [[Z:%.*]] = zext <2 x i1> %X to <2 x i32>
+; CHECK-NEXT:    [[Q:%.*]] = xor <2 x i32> [[Z]], <i32 3, i32 3>
 ; CHECK-NEXT:    ret <2 x i32> [[Q]]
 ;
   %Y = xor <2 x i1> %X, <i1 true, i1 true>
@@ -299,17 +328,6 @@ define i32 @test25(i32 %g, i32 %h) {
   ret i32 %t4
 }
 
-define i32 @test26(i32 %a, i32 %b) {
-; CHECK-LABEL: @test26(
-; CHECK-NEXT:    [[T4:%.*]] = and i32 %a, %b
-; CHECK-NEXT:    ret i32 [[T4]]
-;
-  %b2 = xor i32 %b, -1
-  %t2 = xor i32 %a, %b2
-  %t4 = and i32 %t2, %a
-  ret i32 %t4
-}
-
 define i32 @test27(i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: @test27(
 ; CHECK-NEXT:    [[T6:%.*]] = icmp eq i32 %b, %c
@@ -331,4 +349,362 @@ define i32 @test28(i32 %indvar) {
   %t7 = add i32 %indvar, -2147483647
   %t214 = xor i32 %t7, -2147483648
   ret i32 %t214
+}
+
+define <2 x i32> @test28vec(<2 x i32> %indvar) {
+; CHECK-LABEL: @test28vec(
+; CHECK-NEXT:    [[T214:%.*]] = add <2 x i32> [[INDVAR:%.*]], <i32 1, i32 1>
+; CHECK-NEXT:    ret <2 x i32> [[T214]]
+;
+  %t7 = add <2 x i32> %indvar, <i32 -2147483647, i32 -2147483647>
+  %t214 = xor <2 x i32> %t7, <i32 -2147483648, i32 -2147483648>
+  ret <2 x i32> %t214
+}
+
+define i32 @test28_sub(i32 %indvar) {
+; CHECK-LABEL: @test28_sub(
+; CHECK-NEXT:    [[T214:%.*]] = sub i32 1, [[INDVAR:%.*]]
+; CHECK-NEXT:    ret i32 [[T214]]
+;
+  %t7 = sub i32 -2147483647, %indvar
+  %t214 = xor i32 %t7, -2147483648
+  ret i32 %t214
+}
+
+define <2 x i32> @test28_subvec(<2 x i32> %indvar) {
+; CHECK-LABEL: @test28_subvec(
+; CHECK-NEXT:    [[T214:%.*]] = sub <2 x i32> <i32 1, i32 1>, [[INDVAR:%.*]]
+; CHECK-NEXT:    ret <2 x i32> [[T214]]
+;
+  %t7 = sub <2 x i32> <i32 -2147483647, i32 -2147483647>, %indvar
+  %t214 = xor <2 x i32> %t7, <i32 -2147483648, i32 -2147483648>
+  ret <2 x i32> %t214
+}
+
+define i32 @test29(i1 %C) {
+; CHECK-LABEL: @test29(
+; CHECK-NEXT:    [[V:%.*]] = select i1 [[C:%.*]], i32 915, i32 113
+; CHECK-NEXT:    ret i32 [[V]]
+;
+  %A = select i1 %C, i32 1000, i32 10
+  %V = xor i32 %A, 123
+  ret i32 %V
+}
+
+define <2 x i32> @test29vec(i1 %C) {
+; CHECK-LABEL: @test29vec(
+; CHECK-NEXT:    [[V:%.*]] = select i1 [[C:%.*]], <2 x i32> <i32 915, i32 915>, <2 x i32> <i32 113, i32 113>
+; CHECK-NEXT:    ret <2 x i32> [[V]]
+;
+  %A = select i1 %C, <2 x i32> <i32 1000, i32 1000>, <2 x i32> <i32 10, i32 10>
+  %V = xor <2 x i32> %A, <i32 123, i32 123>
+  ret <2 x i32> %V
+}
+
+define <2 x i32> @test29vec2(i1 %C) {
+; CHECK-LABEL: @test29vec2(
+; CHECK-NEXT:    [[V:%.*]] = select i1 [[C:%.*]], <2 x i32> <i32 915, i32 2185>, <2 x i32> <i32 113, i32 339>
+; CHECK-NEXT:    ret <2 x i32> [[V]]
+;
+  %A = select i1 %C, <2 x i32> <i32 1000, i32 2500>, <2 x i32> <i32 10, i32 30>
+  %V = xor <2 x i32> %A, <i32 123, i32 333>
+  ret <2 x i32> %V
+}
+
+define i32 @test30(i1 %which) {
+; CHECK-LABEL: @test30(
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    br i1 [[WHICH:%.*]], label [[FINAL:%.*]], label [[DELAY:%.*]]
+; CHECK:       delay:
+; CHECK-NEXT:    br label [[FINAL]]
+; CHECK:       final:
+; CHECK-NEXT:    [[A:%.*]] = phi i32 [ 915, [[ENTRY:%.*]] ], [ 113, [[DELAY]] ]
+; CHECK-NEXT:    ret i32 [[A]]
+;
+entry:
+  br i1 %which, label %final, label %delay
+
+delay:
+  br label %final
+
+final:
+  %A = phi i32 [ 1000, %entry ], [ 10, %delay ]
+  %value = xor i32 %A, 123
+  ret i32 %value
+}
+
+define <2 x i32> @test30vec(i1 %which) {
+; CHECK-LABEL: @test30vec(
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    br i1 [[WHICH:%.*]], label [[FINAL:%.*]], label [[DELAY:%.*]]
+; CHECK:       delay:
+; CHECK-NEXT:    br label [[FINAL]]
+; CHECK:       final:
+; CHECK-NEXT:    [[A:%.*]] = phi <2 x i32> [ <i32 915, i32 915>, [[ENTRY:%.*]] ], [ <i32 113, i32 113>, [[DELAY]] ]
+; CHECK-NEXT:    ret <2 x i32> [[A]]
+;
+entry:
+  br i1 %which, label %final, label %delay
+
+delay:
+  br label %final
+
+final:
+  %A = phi <2 x i32> [ <i32 1000, i32 1000>, %entry ], [ <i32 10, i32 10>, %delay ]
+  %value = xor <2 x i32> %A, <i32 123, i32 123>
+  ret <2 x i32> %value
+}
+
+define <2 x i32> @test30vec2(i1 %which) {
+; CHECK-LABEL: @test30vec2(
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    br i1 [[WHICH:%.*]], label [[FINAL:%.*]], label [[DELAY:%.*]]
+; CHECK:       delay:
+; CHECK-NEXT:    br label [[FINAL]]
+; CHECK:       final:
+; CHECK-NEXT:    [[A:%.*]] = phi <2 x i32> [ <i32 915, i32 2185>, [[ENTRY:%.*]] ], [ <i32 113, i32 339>, [[DELAY]] ]
+; CHECK-NEXT:    ret <2 x i32> [[A]]
+;
+entry:
+  br i1 %which, label %final, label %delay
+
+delay:
+  br label %final
+
+final:
+  %A = phi <2 x i32> [ <i32 1000, i32 2500>, %entry ], [ <i32 10, i32 30>, %delay ]
+  %value = xor <2 x i32> %A, <i32 123, i32 333>
+  ret <2 x i32> %value
+}
+
+define i32 @test31(i32 %A, i32 %B) {
+; CHECK-LABEL: @test31(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[B:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[A:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = or i32 %A, %B
+  %xor = xor i32 %B, %and
+  ret i32 %xor
+}
+
+define i32 @test32(i32 %A, i32 %B) {
+; CHECK-LABEL: @test32(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[B:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[A:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = or i32 %B, %A
+  %xor = xor i32 %B, %and
+  ret i32 %xor
+}
+
+define i32 @test33(i32 %A, i32 %B) {
+; CHECK-LABEL: @test33(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[B:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[A:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = or i32 %A, %B
+  %xor = xor i32 %and, %B
+  ret i32 %xor
+}
+
+define i32 @test34(i32 %A, i32 %B) {
+; CHECK-LABEL: @test34(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[B:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[A:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = or i32 %B, %A
+  %xor = xor i32 %and, %B
+  ret i32 %xor
+}
+
+define i32 @test35(i32 %A, i32 %B) {
+; CHECK-LABEL: @test35(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[A:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[B:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = and i32 %A, %B
+  %xor = xor i32 %B, %and
+  ret i32 %xor
+}
+
+define i32 @test36(i32 %A, i32 %B) {
+; CHECK-LABEL: @test36(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[A:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[B:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = and i32 %B, %A
+  %xor = xor i32 %B, %and
+  ret i32 %xor
+}
+
+define i32 @test37(i32 %A, i32 %B) {
+; CHECK-LABEL: @test37(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[A:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[B:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = and i32 %A, %B
+  %xor = xor i32 %and, %B
+  ret i32 %xor
+}
+
+define i32 @test38(i32 %A, i32 %B) {
+; CHECK-LABEL: @test38(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[A:%.*]], -1
+; CHECK-NEXT:    [[XOR:%.*]] = and i32 [[TMP1]], [[B:%.*]]
+; CHECK-NEXT:    ret i32 [[XOR]]
+;
+  %and = and i32 %B, %A
+  %xor = xor i32 %and, %B
+  ret i32 %xor
+}
+
+; The tests 39-47 are related to the canonicalization:
+; %notx = xor i32 %x, -1
+; %cmp = icmp sgt i32 %notx, %y
+; %smax = select i1 %cmp, i32 %notx, i32 %y
+; %res = xor i32 %smax, -1
+;   =>
+; %noty = xor i32 %y, -1
+; %cmp2 = icmp slt %x, %noty
+; %res = select i1 %cmp2, i32 %x, i32 %noty
+;
+; Same transformations is valid for smin/umax/umin.
+
+define i32 @test39(i32 %x) {
+; CHECK-LABEL: @test39(
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp slt i32 [[X:%.*]], 255
+; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP1]], i32 [[X]], i32 255
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+  %1 = xor i32 %x, -1
+  %2 = icmp sgt i32 %1, -256
+  %3 = select i1 %2, i32 %1, i32 -256
+  %res = xor i32 %3, -1
+  ret i32 %res
+}
+
+define i32 @test40(i32 %x, i32 %y) {
+; CHECK-LABEL: @test40(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[Y:%.*]], -1
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp sgt i32 [[TMP1]], [[X:%.*]]
+; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP2]], i32 [[X]], i32 [[TMP1]]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+  %notx = xor i32 %x, -1
+  %cmp1 = icmp sgt i32 %notx, %y
+  %smax = select i1 %cmp1, i32 %notx, i32 %y
+  %res = xor i32 %smax, -1
+  ret i32 %res
+}
+
+define i32 @test41(i32 %x, i32 %y) {
+; CHECK-LABEL: @test41(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[Y:%.*]], -1
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp slt i32 [[TMP1]], [[X:%.*]]
+; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP2]], i32 [[X]], i32 [[TMP1]]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+  %notx = xor i32 %x, -1
+  %cmp1 = icmp slt i32 %notx, %y
+  %smin = select i1 %cmp1, i32 %notx, i32 %y
+  %res = xor i32 %smin, -1
+  ret i32 %res
+}
+
+define i32 @test42(i32 %x, i32 %y) {
+; CHECK-LABEL: @test42(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[Y:%.*]], -1
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp ugt i32 [[TMP1]], [[X:%.*]]
+; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP2]], i32 [[X]], i32 [[TMP1]]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+  %notx = xor i32 %x, -1
+  %cmp1 = icmp ugt i32 %notx, %y
+  %umax = select i1 %cmp1, i32 %notx, i32 %y
+  %res = xor i32 %umax, -1
+  ret i32 %res
+}
+
+define i32 @test43(i32 %x, i32 %y) {
+; CHECK-LABEL: @test43(
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i32 [[Y:%.*]], -1
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp ult i32 [[TMP1]], [[X:%.*]]
+; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP2]], i32 [[X]], i32 [[TMP1]]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+  %notx = xor i32 %x, -1
+  %cmp1 = icmp ult i32 %notx, %y
+  %umin = select i1 %cmp1, i32 %notx, i32 %y
+  %res = xor i32 %umin, -1
+  ret i32 %res
+}
+
+define i32 @test44(i32 %x, i32 %y) {
+; CHECK-LABEL: @test44(
+; CHECK-NEXT:    [[TMP1:%.*]] = sub i32 -4, [[Y:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp ult i32 [[TMP1]], [[X:%.*]]
+; CHECK-NEXT:    [[RES:%.*]] = select i1 [[TMP2]], i32 [[X]], i32 [[TMP1]]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+  %z = add i32 %y, 3 ; thwart complexity-based canonicalization
+  %notx = xor i32 %x, -1
+  %cmp1 = icmp ult i32 %z, %notx
+  %umin = select i1 %cmp1, i32 %z, i32 %notx
+  %res = xor i32 %umin, -1
+  ret i32 %res
+}
+
+define i32 @test45(i32 %x, i32 %y) {
+; CHECK-LABEL: @test45(
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp ugt i32 [[Y:%.*]], [[X:%.*]]
+; CHECK-NEXT:    [[TMP2:%.*]] = select i1 [[TMP1]], i32 [[Y]], i32 [[X]]
+; CHECK-NEXT:    ret i32 [[TMP2]]
+;
+  %z = xor i32 %y, -1
+  %notx = xor i32 %x, -1
+  %cmp1 = icmp ult i32 %z, %notx
+  %umin = select i1 %cmp1, i32 %z, i32 %notx
+  %res = xor i32 %umin, -1
+  ret i32 %res
+}
+
+; Check that we work with splat vectors also.
+define <4 x i32> @test46(<4 x i32> %x) {
+; CHECK-LABEL: @test46(
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp slt <4 x i32> [[X:%.*]], <i32 255, i32 255, i32 255, i32 255>
+; CHECK-NEXT:    [[TMP2:%.*]] = select <4 x i1> [[TMP1]], <4 x i32> [[X]], <4 x i32> <i32 255, i32 255, i32 255, i32 255>
+; CHECK-NEXT:    ret <4 x i32> [[TMP2]]
+;
+  %1 = xor <4 x i32> %x, <i32 -1, i32 -1, i32 -1, i32 -1>
+  %2 = icmp sgt <4 x i32> %1, <i32 -256, i32 -256, i32 -256, i32 -256>
+  %3 = select <4 x i1> %2, <4 x i32> %1, <4 x i32> <i32 -256, i32 -256, i32 -256, i32 -256>
+  %4 = xor <4 x i32> %3, <i32 -1, i32 -1, i32 -1, i32 -1>
+  ret <4 x i32> %4
+}
+
+; Test case when select pattern has more than one use.
+define i32 @test47(i32 %x, i32 %y, i32 %z) {
+; CHECK-LABEL: @test47(
+; CHECK-NEXT:    [[NOTX:%.*]] = xor i32 [[X:%.*]], -1
+; CHECK-NEXT:    [[CMP1:%.*]] = icmp ugt i32 [[NOTX]], [[Y:%.*]]
+; CHECK-NEXT:    [[UMAX:%.*]] = select i1 [[CMP1]], i32 [[NOTX]], i32 [[Y]]
+; CHECK-NEXT:    [[UMIN:%.*]] = xor i32 [[UMAX]], -1
+; CHECK-NEXT:    [[ADD:%.*]] = add i32 [[UMAX]], [[Z:%.*]]
+; CHECK-NEXT:    [[RES:%.*]] = mul i32 [[ADD]], [[UMIN]]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+  %notx = xor i32 %x, -1
+  %cmp1 = icmp ugt i32 %notx, %y
+  %umax = select i1 %cmp1, i32 %notx, i32 %y
+  %umin = xor i32 %umax, -1
+  %add = add i32 %umax, %z
+  %res = mul i32 %umin, %add
+  ret i32 %res
 }

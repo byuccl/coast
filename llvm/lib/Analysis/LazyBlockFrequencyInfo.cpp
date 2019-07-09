@@ -9,14 +9,15 @@
 //
 // This is an alternative analysis pass to BlockFrequencyInfoWrapperPass.  The
 // difference is that with this pass the block frequencies are not computed when
-// the analysis pass is executed but rather when the BFI results is explicitly
+// the analysis pass is executed but rather when the BFI result is explicitly
 // requested by the analysis client.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/LazyBlockFrequencyInfo.h"
-#include "llvm/Analysis/BranchProbabilityInfo.h"
+#include "llvm/Analysis/LazyBranchProbabilityInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/IR/Dominators.h"
 
 using namespace llvm;
 
@@ -24,7 +25,7 @@ using namespace llvm;
 
 INITIALIZE_PASS_BEGIN(LazyBlockFrequencyInfoPass, DEBUG_TYPE,
                       "Lazy Block Frequency Analysis", true, true)
-INITIALIZE_PASS_DEPENDENCY(BranchProbabilityInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(LazyBPIPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_END(LazyBlockFrequencyInfoPass, DEBUG_TYPE,
                     "Lazy Block Frequency Analysis", true, true)
@@ -40,7 +41,11 @@ void LazyBlockFrequencyInfoPass::print(raw_ostream &OS, const Module *) const {
 }
 
 void LazyBlockFrequencyInfoPass::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<BranchProbabilityInfoWrapperPass>();
+  LazyBranchProbabilityInfoPass::getLazyBPIAnalysisUsage(AU);
+  // We require DT so it's available when LI is available. The LI updating code
+  // asserts that DT is also present so if we don't make sure that we have DT
+  // here, that assert will trigger.
+  AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<LoopInfoWrapperPass>();
   AU.setPreservesAll();
 }
@@ -48,21 +53,20 @@ void LazyBlockFrequencyInfoPass::getAnalysisUsage(AnalysisUsage &AU) const {
 void LazyBlockFrequencyInfoPass::releaseMemory() { LBFI.releaseMemory(); }
 
 bool LazyBlockFrequencyInfoPass::runOnFunction(Function &F) {
-  BranchProbabilityInfo &BPI =
-      getAnalysis<BranchProbabilityInfoWrapperPass>().getBPI();
+  auto &BPIPass = getAnalysis<LazyBranchProbabilityInfoPass>();
   LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-  LBFI.setAnalysis(&F, &BPI, &LI);
+  LBFI.setAnalysis(&F, &BPIPass, &LI);
   return false;
 }
 
 void LazyBlockFrequencyInfoPass::getLazyBFIAnalysisUsage(AnalysisUsage &AU) {
-  AU.addRequired<BranchProbabilityInfoWrapperPass>();
+  LazyBranchProbabilityInfoPass::getLazyBPIAnalysisUsage(AU);
   AU.addRequired<LazyBlockFrequencyInfoPass>();
   AU.addRequired<LoopInfoWrapperPass>();
 }
 
 void llvm::initializeLazyBFIPassPass(PassRegistry &Registry) {
-  INITIALIZE_PASS_DEPENDENCY(BranchProbabilityInfoWrapperPass);
+  initializeLazyBPIPassPass(Registry);
   INITIALIZE_PASS_DEPENDENCY(LazyBlockFrequencyInfoPass);
   INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass);
 }

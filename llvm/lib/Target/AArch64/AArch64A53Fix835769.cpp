@@ -22,9 +22,9 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -82,16 +82,18 @@ class AArch64A53Fix835769 : public MachineFunctionPass {
 
 public:
   static char ID;
-  explicit AArch64A53Fix835769() : MachineFunctionPass(ID) {}
+  explicit AArch64A53Fix835769() : MachineFunctionPass(ID) {
+    initializeAArch64A53Fix835769Pass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &F) override;
 
   MachineFunctionProperties getRequiredProperties() const override {
     return MachineFunctionProperties().set(
-        MachineFunctionProperties::Property::AllVRegsAllocated);
+        MachineFunctionProperties::Property::NoVRegs);
   }
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "Workaround A53 erratum 835769 pass";
   }
 
@@ -107,11 +109,14 @@ char AArch64A53Fix835769::ID = 0;
 
 } // end anonymous namespace
 
+INITIALIZE_PASS(AArch64A53Fix835769, "aarch64-fix-cortex-a53-835769-pass",
+                "AArch64 fix for A53 erratum 835769", false, false)
+
 //===----------------------------------------------------------------------===//
 
 bool
 AArch64A53Fix835769::runOnMachineFunction(MachineFunction &F) {
-  DEBUG(dbgs() << "***** AArch64A53Fix835769 *****\n");
+  LLVM_DEBUG(dbgs() << "***** AArch64A53Fix835769 *****\n");
   bool Changed = false;
   TII = F.getSubtarget().getInstrInfo();
 
@@ -185,7 +190,8 @@ static void insertNopBeforeInstruction(MachineBasicBlock &MBB, MachineInstr* MI,
 bool
 AArch64A53Fix835769::runOnBasicBlock(MachineBasicBlock &MBB) {
   bool Changed = false;
-  DEBUG(dbgs() << "Running on MBB: " << MBB << " - scanning instructions...\n");
+  LLVM_DEBUG(dbgs() << "Running on MBB: " << MBB
+                    << " - scanning instructions...\n");
 
   // First, scan the basic block, looking for a sequence of 2 instructions
   // that match the conditions under which the erratum may trigger.
@@ -201,17 +207,17 @@ AArch64A53Fix835769::runOnBasicBlock(MachineBasicBlock &MBB) {
 
   for (auto &MI : MBB) {
     MachineInstr *CurrInstr = &MI;
-    DEBUG(dbgs() << "  Examining: " << MI);
+    LLVM_DEBUG(dbgs() << "  Examining: " << MI);
     if (PrevInstr) {
-      DEBUG(dbgs() << "    PrevInstr: " << *PrevInstr
-                   << "    CurrInstr: " << *CurrInstr
-                   << "    isFirstInstructionInSequence(PrevInstr): "
-                   << isFirstInstructionInSequence(PrevInstr) << "\n"
-                   << "    isSecondInstructionInSequence(CurrInstr): "
-                   << isSecondInstructionInSequence(CurrInstr) << "\n");
+      LLVM_DEBUG(dbgs() << "    PrevInstr: " << *PrevInstr
+                        << "    CurrInstr: " << *CurrInstr
+                        << "    isFirstInstructionInSequence(PrevInstr): "
+                        << isFirstInstructionInSequence(PrevInstr) << "\n"
+                        << "    isSecondInstructionInSequence(CurrInstr): "
+                        << isSecondInstructionInSequence(CurrInstr) << "\n");
       if (isFirstInstructionInSequence(PrevInstr) &&
           isSecondInstructionInSequence(CurrInstr)) {
-        DEBUG(dbgs() << "   ** pattern found at Idx " << Idx << "!\n");
+        LLVM_DEBUG(dbgs() << "   ** pattern found at Idx " << Idx << "!\n");
         Sequences.push_back(CurrInstr);
       }
     }
@@ -220,8 +226,8 @@ AArch64A53Fix835769::runOnBasicBlock(MachineBasicBlock &MBB) {
     ++Idx;
   }
 
-  DEBUG(dbgs() << "Scan complete, " << Sequences.size()
-               << " occurrences of pattern found.\n");
+  LLVM_DEBUG(dbgs() << "Scan complete, " << Sequences.size()
+                    << " occurrences of pattern found.\n");
 
   // Then update the basic block, inserting nops between the detected sequences.
   for (auto &MI : Sequences) {
