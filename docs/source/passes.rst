@@ -24,7 +24,7 @@ Command Line Parameters
 These options are only applicable to the ``-DWC`` and ``-TMR`` passes.
 
 .. table::
-    :widths: 25, 40
+    :widths: 25 40
 
     +---------------------------+-----------------------------------------------------+
     | Command line option       | Effect                                              |
@@ -40,7 +40,7 @@ These options are only applicable to the ``-DWC`` and ``-TMR`` passes.
     +---------------------------+-----------------------------------------------------+
 
 .. table::
-    :widths: 25, 40
+    :widths: 25 40
 
     +---------------------------+-----------------------------------------------------+
     |     ``-ignoreFns=<X>``    | <X> is a comma separated list of the functions      |
@@ -62,7 +62,7 @@ These options are only applicable to the ``-DWC`` and ``-TMR`` passes.
     +---------------------------+-----------------------------------------------------+
 
 .. table::
-    :widths: 25, 40
+    :widths: 25 40
 
     +---------------------------+-----------------------------------------------------+
     |      ``-countErrors``     | Enable TMR to track the number of errors corrected. |
@@ -90,7 +90,7 @@ In-code Directives
 -------------------
 
 .. table::
-    :widths: 25, 40
+    :widths: 25 40
 
     +----------------------+-------------------------------------------------------+
     |       Directive      | Effect                                                |
@@ -105,7 +105,7 @@ In-code Directives
     +----------------------+-------------------------------------------------------+
 
 .. table::
-    :widths: 25, 40
+    :widths: 25 40
 
     +----------------------+-------------------------------------------------------+
     |     ``__NO_xMR``     | Used to tag functions and variables that should       |
@@ -131,6 +131,44 @@ Configuration File
 --------------------
 
 Instead of repeating the same command line options across several compilations, we have created a configuration file, "functions.config" that can capture the same behavior. It is found in the "dataflowProtection" pass folder. The location of this file can be specified using the ``-configFile=<...>`` option. The options are the same as the command line alternatives.
+
+
+When to use replication command line options
+----------------------------------------------
+
+.. list-table::
+    :widths: 10 5 30 55
+    :header-rows: 1
+
+    * - Desired Behavior
+      - Function Type
+      - Option
+      - Use Case
+    * - Protect called function
+      - User
+      - Default
+      - Standard behavior, use for most cases
+    * -
+      - Library
+      - N/A
+      - Cannot modify library calls. Instead, see the case below.
+    * - Replicate call
+      - User
+      - ``-replicateFnCalls=<X>``
+      - When the return value needs to be unique to each instruction replica, e.g. pointers.
+    * -
+      - Library
+      - Default
+      - By default the library calls are performed repeatedly. Use for most calls.
+    * - Call once, unmodified
+      - User
+      - ``-ignoreFns=<X>``
+      - Interrupt service routines and synchronization logic, such as polling on an external pin.
+    * -
+      - Library
+      - ``-skipLibCalls=<X>``
+      - Whenever the call should not be repeated, such as calls interfacing with I/O.
+
 
 
 Details
@@ -168,7 +206,11 @@ If you are developing passes, then on occasion you might need to include more pr
 .. rubric:: Footnotes
 
 .. [#f1] N. Oh, P. P. Shirvani, and E. J. McCluskey, "Control-flow checking by software signatures," *IEEE Transactions on Reliability*\ , vol. 51, no. 1, pp. 111–122, Mar. 2002.
+
 .. [#f2] ——, "Error detection by duplicated instructions in super-scalar processors," *IEEE Transactions on Reliability*\ , vol. 51, no. 1, pp. 63–75, Mar. 2002.
+
 .. [#f3] J. Chang, G. Reis, and D. August, "Automatic Instruction-Level Software-Only Recovery," in *International Conference on Dependable Systems and Networks (DSN’06)*\ . IEEE, 2006, pp. 83–92.
+
 .. [#f4] H. Quinn, Z. Baker, T. Fairbanks, J. L. Tripp, and G. Duran, "Software Resilience and the Effectiveness of Software Mitigation in Microcontrollers," in *IEEE Transactions on Nuclear Science*\ , vol. 62, no. 6, Dec. 2015, pp. 2532–2538.
+
 .. [#f5] E. Chielle, F. L. Kastensmidt, and S. Cuenca-Asensi, "Overhead reduction in data-flow software-based fault tolerance techniques," in *FPGAs and Parallel Architectures for Aerospace Applications: Soft Errors and Fault-Tolerant Design*\ . Cham: Springer International Publishing, 2015, pp. 279–291.

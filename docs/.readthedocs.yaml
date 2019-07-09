@@ -10,3 +10,7 @@ sphinx:
   configuration: docs/conf.py
 
 formats: html
+
+python:
+    install:
+        - requirements: docs/requirements.txt
