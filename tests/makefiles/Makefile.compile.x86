@@ -1,0 +1,67 @@
+# NOTE: created this compile option because LLI fails in certain instances
+# it seems that any C++ program that uses library functions does not work properly
+# because the JIT compiler can't load in the correct symbols
+# There is some discussion about how to make this work
+# https://groups.google.com/forum/#!topic/llvm-dev/zkyouVOezU0
+# but no definitive answer is given
+# https://stackoverflow.com/questions/3509215/llvm-jit-and-native
+
+PROJECT_SRC := ${CURDIR}
+C_SRCS		= $(wildcard $(PROJECT_SRC)/*.c)
+CPP_SRCS	= $(wildcard $(PROJECT_SRC)/*.cpp)
+BCFILES		= $(patsubst %.c,%.clang.bc,$(notdir $(C_SRCS)))
+BCPPFILES	= $(patsubst %.cpp,%.clang.bcpp,$(notdir $(CPP_SRCS)))
+
+CLANG_FLAGS := -fcolor-diagnostics
+XLFLAGS 	?= -lm
+INCS		:=-I$(LEVEL)
+
+
+exe: $(TARGET).out
+
+############### Link step ###############
+$(TARGET).out: $(TARGET).s
+ifeq ($(CPP_SRCS),)
+	$(CLANG) $(TARGET).s $(XLFLAGS) -o $@
+else
+	$(CLANG++) $(TARGET).s $(XLFLAGS) -o $@
+endif
+
+################## LLC ##################
+%.s: %.opt.bc
+	$(LLVM_LLC) -asm-verbose $< -o=$@
+
+$(TARGET).bc: $(TARGET).opt.bc
+	@cp $< $@
+	@rm $<
+
+################## OPT ##################
+$(TARGET).opt.bc: $(TARGET).lbc
+	@echo -e $(COLOR_BLUE)Running through optimizer $(NO_COLOR)
+	@echo "  flags = $(OPT_FLAGS) $(OPT_PASSES)"
+	$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+
+%.ll: %.bc
+	@$(LLVM_DIS) -f $<
+
+############### LLVM-LINK ###############
+$(TARGET).lbc: $(BCFILES) $(BCPPFILES)
+	@echo -e $(COLOR_MAGENTA)Linking source files $(NO_COLOR)
+	$(LLVM_LINK) $^ -o $(TARGET).lbc
+
+################# CLANG #################
+# Lowest level target should depend on the Makefiles
+%.clang.bc: %.c $(MAKEFILES)
+	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
+	@echo '  'flags = $(CLANG_FLAGS)
+	@$(CLANG) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
+
+################ CLANG++ ################
+# Lowest level target should depend on the Makefiles
+%.clang.bcpp: %.cpp $(MAKEFILES)
+	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
+	@echo '  'flags = $(CLANG_FLAGS)
+	$(CLANG++) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
+
+clean:
+	@$(RM) -rf *.bc *.bcpp *.lbc *.llvm.bc *.ll *.s $(TARGET).out

@@ -1,0 +1,3 @@
+LEVEL = ../..
+
+OPT_PASSES = -TMR

@@ -49,7 +49,7 @@ bool dataflowProtection::runOnModule(Module &M) {
 bool dataflowProtection::run(Module &M, int numClones) {
 	// Remove user functions that are never called in the module to reduce code size, processing time
 	// These are mainly inlined by prior optimizations
-	removeUnusedFunctions(M);
+	//removeUnusedFunctions(M);
 
 	// Process user commands inside of the source code
 	// Must happen before processCommandLine to make sure we don't clone things if not needed

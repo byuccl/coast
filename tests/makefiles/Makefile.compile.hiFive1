@@ -1,0 +1,38 @@
+FREEDOM_CC=$(FREEDOM_SDK)/work/build/riscv-gnu-toolchain/riscv64-unknown-elf/prefix/bin/riscv64-unknown-elf-gcc
+
+# Add -O2 later?
+CLANG_FLAGS = -fno-builtin-printf -fno-vectorize -Wall -m32 --target=riscv32
+
+#CFLAGS = -O2 -fno-builtin-printf -g -march=rv32imac -mabi=ilp32 -mcmodel=medany
+LFLAGS = -O2 -fno-builtin-printf -g -march=rv32imac -mabi=ilp32 -mcmodel=medany
+
+INC_FLAGS = -I$(LEVEL) -I$(FREEDOM_SDK)/bsp/include -I$(FREEDOM_SDK)/bsp/drivers/ -I$(FREEDOM_SDK)/bsp/env -I$(FREEDOM_SDK)/bsp/env/freedom-e300-hifive1
+
+exe: $(TARGET)
+
+%.clang.bc: %.c $(INC_FILES)
+	$(CLANG) $(CFLAGS) $(CLANG_FLAGS) $(INC_FLAGS) -emit-llvm $< -c -o $@
+
+%.opt.bc: %.clang.bc $(PROJECT_LIBS)
+	$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	$(LLVM_DIS) $@
+
+%.o: %.opt.bc
+	$(LLVM_LLC) -march=riscv32 -filetype=obj -o $@ $<
+
+$(TARGET): $(TARGET).o $(FREEDOM_BSP_LIBS)
+	$(FREEDOM_CC) $(LFLAGS) $(INC_FLAGS) \
+	$(BOARD_SW)/start.o \
+	$(BOARD_SW)/entry.o \
+	$< \
+	$(FREEDOM_SDK)/bsp/env/freedom-e300-hifive1/init.o \
+	-o $(TARGET) \
+	-L$(BOARD_SW) \
+	-Wl,--wrap=malloc -Wl,--wrap=free -Wl,--wrap=open -Wl,--wrap=lseek -Wl,--wrap=read -Wl,--wrap=write -Wl,--wrap=fstat -Wl,--wrap=stat -Wl,--wrap=close -Wl,--wrap=link -Wl,--wrap=unlink -Wl,--wrap=execve -Wl,--wrap=fork -Wl,--wrap=getpid -Wl,--wrap=kill -Wl,--wrap=wait -Wl,--wrap=isatty -Wl,--wrap=times -Wl,--wrap=sbrk -Wl,--wrap=_exit -Wl,--wrap=puts -Wl,--wrap=_malloc -Wl,--wrap=_free -Wl,--wrap=_open -Wl,--wrap=_lseek -Wl,--wrap=_read -Wl,--wrap=_write -Wl,--wrap=_fstat -Wl,--wrap=_stat -Wl,--wrap=_close -Wl,--wrap=_link -Wl,--wrap=_unlink -Wl,--wrap=_execve -Wl,--wrap=_fork -Wl,--wrap=_getpid -Wl,--wrap=_kill -Wl,--wrap=_wait -Wl,--wrap=_isatty -Wl,--wrap=_times -Wl,--wrap=_sbrk -Wl,--wrap=__exit -Wl,--wrap=_puts -Wl,--start-group -lwrap -lc -Wl,--end-group \
+	-T $(FREEDOM_SDK)/bsp/env/freedom-e300-hifive1/flash.lds \
+	-nostartfiles \
+	-L$(FREEDOM_SDK)/bsp/env \
+	--specs=nano.specs
+
+clean:
+	rm -f $(TARGET) *.o *.ll

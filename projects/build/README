@@ -1,4 +1,0 @@
-Run the following in this directory to build the projects:
-
-cmake ..
-make

@@ -90,7 +90,11 @@ bool DebugStatements::runOnModule(Module &M) {
 			ArrayRef<Value*>* bbCallArgs = new ArrayRef<Value*>(bbArgs);
 
 			//Create all the function calls: function arrow bb newline
-			CallInst* newlinePrint = CallInst::Create(print, *callArgsNewline, "", &*bb.getFirstNonPHI());
+			Instruction* insertionPoint = &*bb.getFirstNonPHI();
+			if (isa<LandingPadInst>(insertionPoint)) {
+				insertionPoint = insertionPoint->getNextNode();
+			}
+			CallInst* newlinePrint = CallInst::Create(print, *callArgsNewline, "", insertionPoint);
 			CallInst* bbPrint = CallInst::Create(print, *bbCallArgs, "", newlinePrint);
 			CallInst* arrowPrint = CallInst::Create(print, *callArgsArrow, "", bbPrint);
 			CallInst* fnNamePrint = CallInst::Create(print, *fnCallArgs, "", arrowPrint);
@@ -100,7 +104,11 @@ bool DebugStatements::runOnModule(Module &M) {
 		}
 
 		//Move all the GEPs to the front of the entry block to dominate all uses
-		newlineGEP->moveBefore(entryBlock->getFirstNonPHI());
+		Instruction* insertionPoint = entryBlock->getFirstNonPHI();
+		if (isa<LandingPadInst>(insertionPoint)) {
+			insertionPoint = insertionPoint->getNextNode();
+		}
+		newlineGEP->moveBefore(insertionPoint);
 		arrowGEP->moveBefore(newlineGEP);
 		fnGEP->moveBefore(arrowGEP);
 	}

@@ -1,0 +1,58 @@
+PROJECT_SRC := ${CURDIR}
+C_SRCS		= $(wildcard $(PROJECT_SRC)/*.c)
+CPP_SRCS	= $(wildcard $(PROJECT_SRC)/*.cpp)
+BCFILES		= $(patsubst %.c,%.clang.bc,$(notdir $(C_SRCS)))
+BCPPFILES	= $(patsubst %.cpp,%.clang.bcpp,$(notdir $(CPP_SRCS)))
+CLANG_FLAGS := -fcolor-diagnostics
+
+exe: $(TARGET).ll $(TARGET).bc
+
+INCS:=-I$(LEVEL)
+
+$(TARGET).bc: $(TARGET).opt.bc
+	@cp $< $@
+	@rm $<
+
+$(TARGET).opt.bc: $(TARGET).lbc
+	@echo -e $(COLOR_BLUE)Running through optimizer $(NO_COLOR)
+	@echo "  flags = $(OPT_FLAGS) $(OPT_PASSES)"
+	$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+
+%.ll: %.bc
+	@$(LLVM_DIS) -f $<
+
+############### LLVM-LINK ###############
+$(TARGET).lbc: $(BCFILES) $(BCPPFILES)
+	@echo -e $(COLOR_MAGENTA)Linking source files $(NO_COLOR)
+	$(LLVM_LINK) $^ -o $(TARGET).lbc
+
+################# CLANG #################
+# Lowest level target should depend on the Makefiles
+%.clang.bc: %.c $(MAKEFILES)
+	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
+	@echo '  'flags = $(CLANG_FLAGS)
+	@$(CLANG) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
+
+################ CLANG++ ################
+# Lowest level target should depend on the Makefiles
+%.clang.bcpp: %.cpp $(MAKEFILES)
+	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
+	@echo '  'flags = $(CLANG_FLAGS)
+	$(CLANG++) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
+
+clean:
+	@$(RM) -rf *.bc *.bcpp *.lbc *.llvm.bc *.ll ./cfg
+
+cfg: $(TARGET).opt.ll $(TARGET).clang.ll
+	@rm -rf cfg
+	@mkdir cfg
+	$(LLVM_OPT) --dot-cfg $(TARGET).clang.ll > /dev/null
+	$(eval DOT_FILES = *.dot)
+	for file in $(DOT_FILES); do \
+		dot $$file -Tpdf > ./cfg/$$file.clang.pdf ;\
+	done
+	$(LLVM_OPT) --dot-cfg $(TARGET).opt.ll > /dev/null
+	for file in $(DOT_FILES); do \
+		dot $$file -Tpdf > ./cfg/$$file.opt.pdf ;\
+	done
+	rm -rf *.dot

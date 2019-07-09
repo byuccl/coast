@@ -60,7 +60,7 @@ bool dataflowProtection::isIndirectFunctionCall(CallInst* CI, std::string errMsg
 	//This partially handles bitcasts and other inline LLVM functions
 	if(CI->getCalledFunction() == nullptr){
 		if(print || verboseFlag)
-			errs() << "WARNING: in " << errMsg << " skipping:\n\t" << *CI << "\n";
+			errs() << warn_string << " in " << errMsg << " skipping:\n\t" << *CI << "\n";
 		return true;
 	}else{
 		return false;
@@ -98,8 +98,8 @@ int dataflowProtection::getFunctionsFromConfig(){
 	if(configFileLocation!=""){
 		filename = configFileLocation;
 	} else{
-		std::string home = std::getenv("HOME");
-		filename = home + "/llvm/projects/dataflowProtection/functions.config";
+		std::string coast = std::getenv("COAST_ROOT");
+		filename = coast + "/projects/dataflowProtection/functions.config";
 	}
 	std::ifstream ifs(filename, std::ifstream::in);
 
@@ -433,8 +433,15 @@ void dataflowProtection::removeAnnotations(Module& M){
 
 void dataflowProtection::removeOrigFunctions() {
 	for (auto F : origFunctions) {
-		if(fnsToCloneAndSkip.find(F)==fnsToCloneAndSkip.end())
-			F->eraseFromParent();
+		if (fnsToCloneAndSkip.find(F)==fnsToCloneAndSkip.end()) {
+			/*
+			 * If not all of the uses are gone, then this function likely is called from within
+			 * and without the Scope Of Replication (SOR). We'll keep it around in that case
+			 */
+			if (F->use_empty()) {
+				F->eraseFromParent();
+			}
+		}
 	}
 }
 
@@ -453,24 +460,29 @@ void dataflowProtection::removeUnusedErrorBlocks(Module & M) {
 void dataflowProtection::removeUnusedGlobals(Module& M){
 	std::vector<GlobalVariable*> unusedGlobals;
 
-	for(GlobalVariable & g : M.getGlobalList()){
-		if(g.getNumUses() == 0){
+	for (GlobalVariable & g : M.getGlobalList()) {
+		if (g.getNumUses() == 0) {
 			StringRef gName = g.getName();
 			//Don't touch ISR related variables
-			if(!(gName.startswith("llvm") || gName.startswith("__vector") || gName.startswith("isr_"))){
+			if (!(gName.startswith("llvm") || gName.startswith("__vector") || gName.startswith("isr_"))) {
 				unusedGlobals.push_back(&g);
 			}
-		} else if(g.getNumUses() == 1){
-			for(auto u : g.users()){
+		} else if (g.getNumUses() == 1) {
+			for (auto u : g.users()) {
 				//Account for instructions that will be cleaned up at the end of the pass
-				if(u->getNumUses() == 0 && !isa<StoreInst>(u)){
+				//it could also be a call instruction to a library function that has side effects, but
+				// we ignore the return value
+				if (u->getNumUses() == 0 && !isa<StoreInst>(u) && !isa<CallInst>(u)) {
 					unusedGlobals.push_back(&g);
 				}
 			}
 		}
 	}
 
-	for(auto ug : unusedGlobals){
+	for (auto ug : unusedGlobals) {
+		if (verboseFlag) {
+			errs() << "Removing unused global: " << ug->getName() << "\n";
+		}
 		ug->eraseFromParent();
 	}
 }
@@ -562,7 +574,7 @@ bool dataflowProtection::willBeSkipped(Instruction* I){
 
 bool dataflowProtection::willBeCloned(Value* v) {
 	Instruction* I = dyn_cast<Instruction>(v);
-	if(I){ // Only instructions are cloned
+	if(I){ 
 		return instsToClone.find(I) != instsToClone.end();
 	}
 
@@ -575,6 +587,11 @@ bool dataflowProtection::willBeCloned(Value* v) {
 	if(e){
 		return constantExprToClone.find(e) != constantExprToClone.end();
 	}
+
+	if (Argument* a = dyn_cast<Argument>(v)) {
+		Function * f = a->getParent();
+		return fnsToClone.find(f) != fnsToClone.end();
+	}	
 
 	return false;
 }
@@ -596,11 +613,17 @@ void dataflowProtection::moveClonesToEndIfSegmented(Module & M){
 
 	for(auto F : fnsToClone) {
 		for (auto & bb : *F) {
+
 			//Populate list of things to move before
 			std::queue<Instruction*> movePoints;
 			for(auto &I : bb){
 				if(CallInst* CI = dyn_cast<CallInst>(&I)){
-					if(isSyncPoint(CI)){
+					/* Fixed an issue where the clone was considered a syncPoint, but wasn't
+					 * in the startOfSyncLogic map, so it was inserting a new element and
+					 * putting in the default Instruction* value (whatever that is) into the
+					 * movePoints map
+					*/
+					if(isSyncPoint(CI) && (startOfSyncLogic.find(&I) != startOfSyncLogic.end()) ){
 //						errs() << "    Move point at CI sync" << *startOfSyncLogic[&I] << "\n";
 						movePoints.push(startOfSyncLogic[&I]);
 					} else{
@@ -618,14 +641,42 @@ void dataflowProtection::moveClonesToEndIfSegmented(Module & M){
 				} else if(StoreInst* SI = dyn_cast<StoreInst>(&I)){
 					if(isSyncPoint(SI)){
 //						errs() << "    Move point at SI" << *startOfSyncLogic[&I] << "\n";
+#ifdef SYNC_POINT_FIX
+						/*
+						 * One problem we saw was when a basic block was split, the instruction which
+						 * is the startOfSyncLogic for a following instruction would be in the block
+						 * before the split.  So it was a valid instruction, but it never matched the
+						 * check below because it was in a different basic block. Same check added to
+						 * the GEP checker
+						 */
+						if ( (startOfSyncLogic.find(&I) != startOfSyncLogic.end() ) && \
+							 (startOfSyncLogic[&I]->getParent() == I.getParent()) ) {
+							movePoints.push(startOfSyncLogic[&I]);
+						} else {
+							movePoints.push(&I);
+						}
+#else					//old stuff
 						movePoints.push(startOfSyncLogic[&I]);
+#endif
 					}
 				} else if(GetElementPtrInst* GI = dyn_cast<GetElementPtrInst>(&I)){
-					if(isSyncPoint(GI)){
+#ifdef SYNC_POINT_FIX
+					if (isSyncPoint(GI)) {
+						//not all GEP syncpoints have a corresponding entry in the map
+						if ( (startOfSyncLogic.find(&I) != startOfSyncLogic.end() ) &&
+							 (startOfSyncLogic[&I]->getParent() == I.getParent()) ) {
+							movePoints.push(startOfSyncLogic[&I]);
+						} else {
+							movePoints.push(&I);
+						}
+					}
+#else
+					if (isSyncPoint(GI)) {
 //						errs() << "    Source instruct:" << I << "\n";
 //						errs() << "    Move point at GI" << *startOfSyncLogic[&I] << "\n";
 						movePoints.push(startOfSyncLogic[&I]);
 					}
+#endif
 				}
 			}
 
@@ -637,14 +688,25 @@ void dataflowProtection::moveClonesToEndIfSegmented(Module & M){
 				//see if it's a clone
 				if(PHINode* PN = dyn_cast<PHINode>(&I)){
 					//don't move it, phi nodes must be at the start
-				} else if(getClone(&I).first != &I){
+#ifdef SYNC_POINT_FIX
+				} else if ( (getClone(&I).first != &I) && !(isSyncPoint(&I)) ) {
+#else
+				} else if (getClone(&I).first != &I) {
+#endif
 					Instruction* cloneI1 = dyn_cast<Instruction>(getClone(&I).first);
 					listI1.push_back(cloneI1);
 					if(TMR){
 						Instruction* cloneI2 = dyn_cast<Instruction>(getClone(&I).second);
 						listI2.push_back(cloneI2);
 					}
+
+#ifdef SYNC_POINT_FIX
+				}
+				// this is a separate condition, not dependent on it being a cloned instruction
+				if(&I == movePoints.front()){
+#else
 				} else if(&I == movePoints.front()){
+#endif
 					Instruction* inst = movePoints.front();
 					for(auto it : listI1){
 						it->moveBefore(movePoints.front());
@@ -657,6 +719,7 @@ void dataflowProtection::moveClonesToEndIfSegmented(Module & M){
 					listI2.clear();
 
 					movePoints.pop();
+
 				}
 			}
 
@@ -684,6 +747,13 @@ void dataflowProtection::moveClonesToEndIfSegmented(Module & M){
 					}
 				}
 			}
+			//cleanup for some things
+			//in case didn't get cleared earlier
+			listI1.clear();
+			listI2.clear();
+			//empty the queue
+			while (!movePoints.empty())
+				movePoints.pop();
 
 		}
 	}

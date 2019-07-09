@@ -11,6 +11,9 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
 
+//trying to fix the issue with instructions not segmenting correctly
+#define SYNC_POINT_FIX
+
 using namespace llvm;
 
 typedef std::pair<Value*, Value*> ValuePair;
@@ -30,7 +33,7 @@ private:
   bool xMR_default = true;
 
   //----------------------------------------------------------------------------//
-  // Constant strings matching tropic.h annotations
+  // Constant strings matching COAST.h annotations
   //----------------------------------------------------------------------------//
   const std::string no_xMR_anno    = "no_xMR";
   const std::string xMR_anno       = "xMR";
@@ -38,6 +41,15 @@ private:
   const std::string default_xMR    = "set_xMR_default";
   const std::string default_no_xMR = "set_no_xMR_default";
   const std::string default_global = "__xMR_DEFAULT_BEHAVIOR__";
+
+  //----------------------------------------------------------------------------//
+  // Constant strings for fancy printing
+  //----------------------------------------------------------------------------//
+  const std::string err_string		= "\033[0;31mERROR:\033[0m";
+  const std::string warn_string		= "\033[0;33mWARNING:\033[0m";
+  const std::string info_string		= "\033[0;35mINFO:\033[0m";
+  const std::string blue_string		= "\033[0;34m";
+  const std::string no_color_string	= "\033[0m";
 
   //----------------------------------------------------------------------------//
   // Internal variables to keep track of the different mappings
@@ -51,6 +63,8 @@ private:
   std::set<GlobalVariable*> globalsToSkip;
   std::set<GlobalVariable*> globalsToRuntimeInit;
   std::set<ConstantExpr*> constantExprToClone;
+  std::set<Function*> fnsUsedIndirectly;
+  std::set<Type*> indirectFnSignatures;
 
   std::vector<Instruction*> syncPoints;
   std::map<Value*,ValuePair> cloneMap;
@@ -132,6 +146,7 @@ private:
   int getArrayTypeElementBitWidth(Module& M, ArrayType * arrayType);
   void recursivelyVisitCalls(Module& M, Function* F, std::set<Function*> &functionList);
   bool isISR(Function& F);
+  void cloneMetadata(Module& M, Function* Fnew);
   // Synchronization utilities
   bool isSyncPoint(Instruction* I);
   // Miscellaneous

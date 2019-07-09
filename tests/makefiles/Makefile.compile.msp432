@@ -1,0 +1,172 @@
+# built for CCS v8.0.0
+COMPILER_ROOT 	:= $(CCS_ROOT)/../tools/compiler
+ARM_COMPILER  	:= $(COMPILER_ROOT)/ti-cgt-arm_18.1.1.LTS
+ARMCL 		  	:= $(ARM_COMPILER)/bin/armcl
+RTOS_PATH	  	:= /home/bjames/projects/rtos/FreeRTOSv10.1.1
+ARM_GCC_DIR   	:= $(COMPILER_ROOT)/gcc-arm-none-eabi-7-2017-q4-major
+
+THIS_DIR		:= $(shell pwd)
+PROJ_DIR		:= $(THIS_DIR)
+BUILD_DIR		:= ./build
+BSP_DIRS		+= $(RTOS_PATH)/FreeRTOS/Source/portable/CCS/ARM_CM4F
+BSP_DIRS		+= $(RTOS_PATH)/FreeRTOS/Source
+
+ARCH 			:= --target=arm -mfloat-abi=hard -mcpu=cortex-m4 -march=armv7e-m -mthumb
+DEFINES_ARM		:= --define=__MSP432P401R__ --define=USE_CMSIS_REGISTER_FORMAT=1 --define=TARGET_IS_MSP432P4XX --define=ccs
+DEFINES_CLANG	:= -D__MSP432P401R__ -DUSE_CMSIS_REGISTER_FORMAT=1 -DTARGET_IS_MSP432P4XX -Dccs
+REDEFINES 		:= -D'__WCHAR_T_TYPE__=unsigned short' -D'__SIZE_T_TYPE__=unsigned' -D'__PTRDIFF_T_TYPE__=int'
+
+STACK_SIZE = 0x800
+HEAP_SIZE  = 0x0
+
+EXTRA_INCS	:= $(foreach dir,$(SRC_DIRS),-I $(PROJ_DIR)/$(dir))
+EXTRA_INCS	+= $(foreach dir,$(BSP_DIRS),-I $(PROJ_DIR)/$(dir))
+EXTRA_CL_INCS	:= $(foreach dir,$(BSP_DIRS),-i"$(PROJ_DIR)/$(dir)")
+EXTRA_CL_INCS	+= $(foreach dir,$(INC_DIRS),-i"$(PROJ_DIR)/$(dir)")
+
+CLANG_FLAGS	:=  -fcolor-diagnostics $(ARCH) -fshort-wchar -fshort-enums -emit-llvm -c $(OPT_LEVEL) $(INCLUDES) $(DEFINES_CLANG) $(REDEFINES)
+DEV_INCS 	:= -I $(INC_DIRS) $(EXTRA_INCS) -I $(CCS_ROOT)/arm/include -I $(CCS_ROOT)/arm/include/CMSIS -I $(RTOS_PATH)/FreeRTOS-Plus/Source/FreeRTOS-Plus-CLI -I $(RTOS_PATH)/FreeRTOS/Demo/Common/include -I $(RTOS_PATH)/FreeRTOS/Source/include -I $(RTOS_PATH)/FreeRTOS/Source/portable/CCS/ARM_CM4F -I $(ARM_COMPILER)/include -I $(PROJ_DIR) -I"$(ARM_GCC_DIR)/arm-none-eabi/include"
+DEV_OTHER_FLAGS = --preproc_with_compile --float_support=FPv4SPD16 $(DEFINES)
+DEV_CFLAGS 	:= -mv7M4 --code_state=16 -g --abi=eabi -me -O0 --opt_for_speed=2 --diag_warning=225 --diag_wrap=off --display_error_number --float_support=FPv4SPD16 --wchar_t=16 --enum_type=packed $(DEFINES_ARM) -fbuiltin
+CL_INCS 	:= -i"$(PROJ_DIR)/" $(EXTRA_CL_INCS) -i"$(ARM_COMPILER)/include/" -i"$(CCS_ROOT)/arm/include" -i"$(CCS_ROOT)/arm/include/CMSIS" -i"$(RTOS_PATH)/FreeRTOS-Plus/Source/FreeRTOS-Plus-CLI" -i"$(RTOS_PATH)/FreeRTOS/Demo/Common/include" -i"$(RTOS_PATH)/FreeRTOS/Source/include" -i"$(RTOS_PATH)/FreeRTOS/Source/portable/CCS/ARM_CM4F" -i"$(RTOS_PATH)"
+LINK_INCS 	:= -i"$(ARM_COMPILER)/lib/" -i"$(ARM_COMPILER)/include/" -i"$(CCS_ROOT)/arm/include/"
+DEV_LFLAGS 	:= --issue_remarks -z -m"$(TARGET).map" --heap_size=$(HEAP_SIZE) --stack_size=$(STACK_SIZE) $(LINK_INCS) --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="$(TARGET)_linkInfo.xml" --rom_model --unused_section_elimination=on
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=arm -mcpu=cortex-m4 -mattr=+vfp3 -float-abi=hard
+MC_FLAGS 	:= -triple=armv7-none-eabi -mcpu=cortex-m4 -target-abi=hard -filetype=obj
+LINK_FILE 	:= "$(LNK_FL_DIR)/msp432p401r.cmd"
+LIBRARY_NAME	:= rtsv7M4_T_le_v4SPD16_eabi.lib
+LIBS 		:= -l$(LIBRARY_NAME)
+
+
+# get the files to be used
+C_SRCS 		:= $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c))
+ASM_SRCS 	:= $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.asm))
+BCFILES		:= $(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(C_SRCS)))
+ASM_OBJS	:= $(patsubst %.asm,$(BUILD_DIR)/%.o,$(notdir $(ASM_SRCS)))
+BSP_SRCS	:= $(foreach dir,$(BSP_DIRS),$(wildcard $(dir)/*.c))
+BSP_OBJS	:= $(patsubst %.c,$(BUILD_DIR)/%.o,$(notdir $(BSP_SRCS)))
+BSP_ASMS	:= $(foreach dir,$(BSP_DIRS),$(wildcard $(dir)/*.asm))
+ASM_OBJS	+= $(patsubst %.asm,$(BUILD_DIR)/%.o,$(notdir $(BSP_ASMS)))
+
+
+
+exe: $(BUILD_DIR)/$(TARGET).out
+
+
+# make sure our build directory exists
+$(BUILD_DIR)/:
+	@mkdir -p $@
+
+
+#------------------------------------------------------------------------------
+# Linker
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).out: $(BUILD_DIR)/$(TARGET).o $(ASM_OBJS) $(BSP_OBJS) $(BUILD_DIR)/heap_4.o | $(BUILD_DIR) $(ARM_COMPILER)/lib/$(LIBRARY_NAME)
+	@echo -e $(COLOR_YELLOW)Linking with libraries $(NO_COLOR)
+	$(ARMCL) $(DEV_CFLAGS) $(LINK_INCS) $(DEV_OTHER_FLAGS) $(DEV_LFLAGS) -o $@ $^ $(LINK_FILE) $(LIBS)
+
+# @echo '  'Sources: $^
+#------------------------------------------------------------------------------
+# rule for object files
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).o: $(BUILD_DIR)/$(TARGET).s
+	@echo -e $(COLOR_BLUE)Translating to machine code $(NO_COLOR)
+	$(LLVM_MC) $< $(MC_FLAGS) -o $@
+
+#------------------------------------------------------------------------------
+# rule for assembly (.s) files
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).s: $(BUILD_DIR)/$(TARGET).opt.bc
+	@echo -e $(COLOR_MAGENTA)Compiling to assembly $(NO_COLOR)
+	@$(LLVM_LLC) $(LLC_FLAGS) $< -o=$@
+
+#------------------------------------------------------------------------------
+# run through the optimizer
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).opt.bc: $(BUILD_DIR)/$(TARGET).lbc
+	@$(LLVM_DIS) -f $<
+	@echo -e $(COLOR_GREEN)Running through optimizer $(NO_COLOR)
+	@echo "flags = $(OPT_FLAGS) $(OPT_PASSES)"
+	@$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_DIS) -f $@
+
+#------------------------------------------------------------------------------
+# link all of the .bc files together, so the passes will run on
+#	everything at the same time
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).lbc: $(BCFILES)
+	@echo -e $(COLOR_MAGENTA)Linking source files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $(BUILD_DIR)/$(TARGET).lbc
+
+#------------------------------------------------------------------------------
+# rule for compiling C sources into object files with CLANG
+#------------------------------------------------------------------------------
+# have to create a separate rule for each source directory
+#  but we can use a special construct to generate rules
+
+define bc_file_compile =
+dir := $(1)
+$$(BUILD_DIR)/%.bc: $$(dir)/%.c | $$(BUILD_DIR)/
+	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
+	@echo '  'flags = $$(CLANG_FLAGS)
+	@$$(CLANG) -emit-llvm $$(CLANG_FLAGS) $$(DEV_INCS) $$< -c -o $$@
+endef
+
+$(foreach dir,$(SRC_DIRS),$(eval $(call bc_file_compile,$(dir))))
+
+## Things not to be xMR-d ##
+
+#------------------------------------------------------------------------------
+# rule for compiling C sources into object files with armcl
+#------------------------------------------------------------------------------
+# have to create a separate rule for each source directory
+#  but we can use a special construct to generate rules
+
+define obj_file_compile =
+dir := $(1)
+$$(BUILD_DIR)/%.o: $$(dir)/%.c | $$(BUILD_DIR)/
+	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
+	@echo '  'flags = $$(DEV_CFLAGS)
+	@$$(ARMCL) $$(DEV_CFLAGS) $$(CL_INCS) $$< --output_file=$$@
+endef
+
+$(foreach dir,$(BSP_DIRS),$(eval $(call obj_file_compile,$(dir))))
+
+# this one is annoying
+$(BUILD_DIR)/heap_4.o: $(RTOS_PATH)/FreeRTOS/Source/portable/MemMang/heap_4.c
+	@echo -e $(COLOR_BLUE)Building $(notdir $@)$(NO_COLOR)
+	@echo '  'flags = $(DEV_CFLAGS)
+	@$(ARMCL) $(DEV_CFLAGS) $(CL_INCS) $< --output_file=$@
+
+#------------------------------------------------------------------------------
+# rule for compiling assembly sources into object files with armcl
+#------------------------------------------------------------------------------
+# have to create a separate rule for each source directory
+#  but we can use a special construct to generate rules
+
+define asm_file_compile =
+dir := $(1)
+$$(BUILD_DIR)/%.o: $$(dir)/%.asm | $$(BUILD_DIR)/
+	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
+	@echo '  'flags = $$(DEV_CFLAGS)
+	@$$(ARMCL) $$(DEV_CFLAGS) $$(CL_INCS) $$< --output_file=$$@
+endef
+
+$(foreach dir,$(SRC_DIRS),$(eval $(call asm_file_compile,$(dir))))
+$(foreach dir,$(BSP_DIRS),$(eval $(call asm_file_compile,$(dir))))
+
+
+.PHONY: print clean
+
+clean:
+	rm -rf $(BUILD_DIR)/*.bc $(BUILD_DIR)/*.lbc $(BUILD_DIR)/*.o $(BUILD_DIR)/*.s $(BUILD_DIR)/*.ll
+
+print:
+	@echo $(C_SRCS)
+	@echo $(words $(C_SRCS))
+	@echo
+	@echo $(ASM_OBJS)
+	@echo
+	@echo $(BSP_SRCS)
+	@echo
+	@echo $(BSP_OBJS)

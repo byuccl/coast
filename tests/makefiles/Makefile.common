@@ -1,0 +1,20 @@
+.SUFFIXES:
+
+error:
+	@echo "Please choose a target"
+	@exit 2
+
+MAKEFILES := Makefile $(shell find $(LEVEL)/makefiles)
+
+include $(LEVEL)/makefiles/config
+include $(LEVEL)/makefiles/colors
+
+LLVM_BUILD_DIR = $(COAST_ROOT)/build
+BOARDS = $(COAST_ROOT)/boards
+
+export BOARD_DIR = $(BOARDS)/$(BOARD)
+export BOARD_HW = $(BOARD_DIR)/hw
+export BOARD_SW = $(BOARD_DIR)/sw
+
+include $(LEVEL)/makefiles/Makefile.compile
+include $(LEVEL)/makefiles/Makefile.program

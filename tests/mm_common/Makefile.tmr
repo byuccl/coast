@@ -1,0 +1,8 @@
+LEVEL = ..
+TARGET = mm_tmr
+OPT_PASSES = -TMR #-DebugStatements
+OPT_FLAGS =
+
+BOARD = lli
+
+include $(LEVEL)/makefiles/Makefile.common

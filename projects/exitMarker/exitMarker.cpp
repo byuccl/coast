@@ -127,7 +127,7 @@ bool ExitMarker::runOnModule(Module &M) {
 	BasicBlock* bb = BasicBlock::Create(M.getContext(), Twine("entry"), exitMarkerFn, NULL);
 
 	//Create the terminator that returns the argument passed into the function
-	assert(exitMarkerFn->getArgumentList().size() == 1);
+	assert(exitMarkerFn->arg_size() == 1);
 	Argument* arg = &*(exitMarkerFn->arg_begin());
 	ReturnInst* term = ReturnInst::Create(M.getContext(), arg ,bb);
 

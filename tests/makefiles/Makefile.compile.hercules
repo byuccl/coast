@@ -1,0 +1,219 @@
+ifeq ($(BOARD), $(BOARD_TMS1224))
+SERIES 	= TMS570LS1224
+
+else ifeq ($(BOARD), $(BOARD_TMS4357))
+SERIES	= TMS570LC43xx
+
+else
+SERIES	= TMS570LS1224
+endif
+
+# allowed SERIES values: TMS570LS043x, TMS570LS1224, TMS570LC43xx, RM42x
+#  adding more will require adding more compiler flags below
+
+# built for CCS v8.0.0
+COMPILER_ROOT = $(CCS_ROOT)/../tools/compiler
+
+#Change these every time you update CCS
+ARM_GCC_DIR   = $(COMPILER_ROOT)/gcc-arm-none-eabi-7-2017-q4-major
+ARM_COMPILER  = $(COMPILER_ROOT)/ti-cgt-arm_18.1.4.LTS
+ARMCL 		  = $(ARM_COMPILER)/bin/armcl
+
+#--------------------------------------------------------------
+# End user parameters
+#--------------------------------------------------------------
+# Program aliases
+#--------------------------------------------------------------
+THIS_DIR	:= $(shell pwd)
+PROJ_DIR	:= $(THIS_DIR)
+# BUILD_DIR	:= $(THIS_DIR)/build
+BUILD_DIR	:= ./build
+
+# Opt settings, load all custom passes
+#--------------------------------------------------------------
+# rwildcard=$(wildcard $1$2)$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+# PROJECT_LIBS := $(call rwildcard,$(PROJECT_BUILD_DIR),*.so)
+# OPT_LIBS_LOAD = -load $(HOME)/llvm/projects/build/errorBlocks/ErrorBlocks.so -load $(HOME)/llvm/projects/build/dataflowProtection/DataflowProtection.so $(foreach lib, $(PROJECT_LIBS) , -load $(lib))
+
+STACK_SIZE = 0x800
+HEAP_SIZE  = 0x800
+
+# the HALCoGen code is built for gcc, but we're using Clang
+#	so some predefined symbols don't match names exactly
+REDEFINES = -D'__WCHAR_T_TYPE__=unsigned short' -D'__SIZE_T_TYPE__=unsigned' -D'__PTRDIFF_T_TYPE__=int'
+
+#--------------------------------------------------------------
+# Compiler Flags
+#	different compiler flags for each of the different processors
+#--------------------------------------------------------------
+DEV_INCS = -nostdinc -I "$(PROJ_DIR)/" -I "$(PROJ_DIR)/include/" -I "$(ARM_COMPILER)/include/" -I "$(THIS_DIR)"
+DEV_OTHER_FLAGS = --preproc_with_compile
+CLANG_FLAGS := -fcolor-diagnostics --target=armv7r-eabi $(REDEFINES) -fshort-wchar
+DEV_CFLAGS 	:= -mv7R4 --code_state=32 -g --abi=eabi --enum_type=packed --diag_warning=225 --diag_wrap=off --display_error_number --enum_type=packed --wchar_t=16
+CL_INCS 	:= -i"$(PROJ_DIR)/" -i"$(PROJ_DIR)/include/" -i"$(ARM_COMPILER)/include/"
+LINK_INCS 	:= -i"$(ARM_COMPILER)/lib/" -i"$(CCS_ROOT)/arm/include/"
+DEV_LFLAGS 	:= --issue_remarks -z -m"$(TARGET).map" --heap_size=$(HEAP_SIZE) --stack_size=$(STACK_SIZE) -i"$(ARM_COMPILER)/lib" -i"$(ARM_COMPILER)/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="$(TARGET)_linkInfo.xml" --rom_model
+
+ifeq ($(SERIES),TMS570LS043x)
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=armeb -mcpu=cortex-r4 -mattr=r4
+MC_FLAGS 	:= -triple=armebv7-none-eabi -mcpu=cortex-r4 -filetype=obj
+DEV_LFLAGS	+= -D'__TMS470__' -D'__TI_TMS470_V7R4__' --be32
+LINK_FILE 	:= "$(PROJ_DIR)/source/sys_link.cmd"
+LIBS 		:= --library="rtsv7R4_A_be_eabi_eh.lib"
+# since automatic RTS library selection doesn't seem to work outside of CCS
+
+else ifeq ($(SERIES),RM42x)
+DEV_CFLAGS  += --little_endian
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=arm -mcpu=cortex-r4 -mattr=r4
+MC_FLAGS 	:= -triple=armv7-none-eabi -mcpu=cortex-r4 -filetype=obj
+LINK_FILE 	:= "$(PROJ_DIR)/source/sys_link.cmd"
+LIBS 		:= --library="rtsv7R4_A_le_eabi_eh.lib"
+
+else ifeq ($(SERIES),TMS570LS1224)
+CLANG_FLAGS += -mfloat-abi=hard -mfpu=vfpv3-d16 -D'__TI_STRICT_FP_MODE__' -D'__TI_VFP_SUPPORT__' -D'__TI_VFPV3D16_SUPPORT__'
+DEV_CFLAGS 	+= --float_support=VFPv3D16
+DEV_OTHER_FLAGS += --float_support=VFPv3D16
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=armeb -mcpu=cortex-r4 -mattr=r4,+vfp3,+d16 -float-abi=hard
+MC_FLAGS 	:= -triple=armebv7-none-eabi -mcpu=cortex-r4 -target-abi=hard -filetype=obj
+DEV_LFLAGS 	+= --be32
+LINK_FILE 	:= "$(PROJ_DIR)/source/sys_link.cmd"
+LIBRARY_NAME	:= rtsv7R4_T_be_v3D16_eabi_eh.lib
+LIBS 		:= -l$(LIBRARY_NAME)
+
+else ifeq ($(SERIES),TMS570LC43xx)
+# -D'__ARM_ARCH_ISA_ARM' -mhwdiv=thumb,arm
+CLANG_FLAGS += -mfloat-abi=hard -mfpu=vfpv3-d16 -D'__TI_STRICT_FP_MODE__' -D'__TI_VFP_SUPPORT__' -D'__TI_VFPV3D16_SUPPORT__'
+DEV_CFLAGS 	+= --float_support=VFPv3D16
+DEV_OTHER_FLAGS += --float_support=VFPv3D16
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=armeb -mcpu=cortex-r4 -mattr=r4,+vfp3,+d16 -float-abi=hard
+MC_FLAGS 	:= -triple=armebv7-none-eabi -mcpu=cortex-r4 -target-abi=hard -filetype=obj
+DEV_LFLAGS 	+= -D'__TMS470__' -D'__TI_TMS470_V7R5__' -D'__TI_ARM_V7R5__' --be32
+LINK_FILE 	:= "$(PROJ_DIR)/source/HL_sys_link.cmd"
+LIBRARY_NAME	:= rtsv7R4_A_be_v3D16_eabi_eh.lib
+LIBS 		:= -l$(LIBRARY_NAME)
+
+else
+$(error Part not supported)
+
+endif
+
+
+# the list of all the source files needed to compile
+C_SRCS=$(wildcard $(PROJ_DIR)/source/*.c)
+ASM_SRCS=$(wildcard $(PROJ_DIR)/source/*.asm)
+BCFILES=$(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(C_SRCS)))
+ASM_OBJS=$(patsubst %.asm,$(BUILD_DIR)/%.o,$(notdir $(ASM_SRCS)))
+# the fact that some of the source files are already in assembly form means that
+#	 the parts of the code contained therein cannot be protected with COAST
+
+ifeq ($(SERIES),TMS570LC43xx)
+exe:
+	@make all -C ./Debug --quiet
+
+clean:
+	@make clean -C ./Debug --quiet
+
+else
+
+exe: $(BUILD_DIR)/$(TARGET).out
+
+# make sure our build directory exists
+$(BUILD_DIR)/:
+	@mkdir -p $@
+
+#------------------------------------------------------------------------------
+# Linker
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).out: $(BUILD_DIR)/$(TARGET).o $(ASM_OBJS) | $(BUILD_DIR) $(ARM_COMPILER)/lib/$(LIBRARY_NAME)
+	@echo -e $(COLOR_YELLOW)Linking with libraries $(NO_COLOR)
+	$(ARMCL) $(DEV_CFLAGS) $(LINK_INCS) $(DEV_OTHER_FLAGS) $(DEV_LFLAGS) -o $@ $(BUILD_DIR)/$(TARGET).o $(ASM_OBJS) $(LINK_FILE) $(LIBS)
+
+#------------------------------------------------------------------------------
+# rule for object files
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).o: $(BUILD_DIR)/$(TARGET).s
+	@echo -e $(COLOR_BLUE)Translating to machine code $(NO_COLOR)
+	@$(LLVM_MC) $< $(MC_FLAGS) -o $@
+
+#------------------------------------------------------------------------------
+# rule for assembly (.s) files
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).s: $(BUILD_DIR)/$(TARGET).opt.bc
+	@echo -e $(COLOR_MAGENTA)Compiling to assembly $(NO_COLOR)
+	@$(LLVM_LLC) $(LLC_FLAGS) $< -o=$@
+
+#------------------------------------------------------------------------------
+# run through the optimizer
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).opt.bc: $(BUILD_DIR)/$(TARGET).lbc
+	@$(LLVM_DIS) -f $<
+	@echo -e $(COLOR_BLUE)Running through optimizer $(NO_COLOR)
+	@echo "flags = $(OPT_FLAGS) $(OPT_PASSES)"
+	@$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_DIS) -f $@
+
+#------------------------------------------------------------------------------
+# link all of the .bc files together, so the passes will run on
+#	everything at the same time
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/$(TARGET).lbc: $(BCFILES)
+	@echo -e $(COLOR_MAGENTA)Linking source files $(NO_COLOR)
+	@$(LLVM_LINK) $(BCFILES) -o $(BUILD_DIR)/$(TARGET).lbc
+
+#------------------------------------------------------------------------------
+# rule for compiling C sources into object files with CLANG
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/%.bc: $(PROJ_DIR)/source/%.c | $(BUILD_DIR)/
+	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
+	@echo '  'flags = $(CLANG_FLAGS)
+	@$(CLANG) $(CLANG_FLAGS) -emit-llvm $(DEV_INCS) $< -c -o $@
+
+#------------------------------------------------------------------------------
+# compiling .asm files into object files
+#------------------------------------------------------------------------------
+$(BUILD_DIR)/%.o: $(PROJ_DIR)/source/%.asm
+	@echo -e $(COLOR_BLUE)Building $@ $(NO_COLOR)
+	@echo '  'flags = $(DEV_CFLAGS) $(CL_INCS)
+	@$(ARMCL) $(DEV_CFLAGS) $(CL_INCS) $< --output_file=$@
+
+#------------------------------------------------------------------------------
+# other stuff
+#------------------------------------------------------------------------------
+
+# intermediate step (convenience)
+assemble: $(BUILD_DIR)/$(TARGET).s
+
+
+.PHONY: clean half_clean print_hercules fix_pragmas
+
+# verify that all of the wildcards are working
+print_hercules:
+	@echo "C_SRCS" $(C_SRCS)
+	@echo "ASM_SRCS" $(ASM_SRCS)
+	@echo "BCFILES" $(BCFILES)
+	@echo "CLANG_FLAGS" $(CLANG_FLAGS)
+
+# remove all intermediate steps
+half_clean:
+	@rm -f ./build/$(TARGET).o ./build/*.ll ./build/*.lbc ./build/*.s ./$(TARGET).out ./$(TARGET).map ./$(TARGET)_linkInfo.xml
+
+clean:
+	@rm -f ./build/*.bc ./build/*.o
+
+# TI code from HALCoGen comes with #pragma WEAK directives
+# these are not supported by Clang, but they also do not cause errors if left in
+# add in __attribute__ ((weak)) in all of those places
+# change the search pattern if you want to use this
+PRGMA_SRCH_PTRN := *.c.bak
+fix_pragmas:
+	sed -i -E 's/#pragma WEAK\([a-zA-Z0-9]*\)/__attribute__ ((weak))\n&/' $(PRGMA_SRCH_PTRN)
+
+endif
+
+# make sure our library file exists
+# https://stackoverflow.com/questions/1789594/how-do-i-write-the-cd-command-in-a-makefile
+$(LIBRARY_NAME):
+	@cd $(ARM_COMPILER)/lib ; \
+	echo -e $(COLOR_BLACK)Making run-time library$(NO_COLOR); \
+	./mklib --index=libc.a --pattern=$(LIBRARY_NAME) --compiler_bin_dir=$(ARM_COMPILER)/bin; \
+	cd -

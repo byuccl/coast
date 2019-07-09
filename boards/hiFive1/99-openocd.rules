@@ -1,0 +1,8 @@
+# These are for the HiFive1 Board
+SUBSYSTEM=="usb", ATTR{idVendor}=="0403",ATTR{idProduct}=="6010", MODE="664", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403",ATTRS{idProduct}=="6010", MODE="664", GROUP="dialout"
+
+# These are for the Olimex Debugger for use with E310 Arty Dev Kit
+SUBSYSTEM=="usb", ATTR{idVendor}=="15ba",ATTR{idProduct}=="002a", MODE="664", GROUP="dialout" 
+SUBSYSTEM=="tty", ATTRS{idVendor}=="15ba", ATTRS{idProduct}=="002a", MODE="664", GROUP="dialout"
+

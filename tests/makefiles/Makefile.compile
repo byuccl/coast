@@ -1,0 +1,57 @@
+LLVM_BIN = $(LLVM_BUILD_DIR)/bin
+
+CLANG 		:= $(LLVM_BIN)/clang
+CLANG++ 	:= $(LLVM_BIN)/clang++
+LLVM_DIS 	:= $(LLVM_BIN)/llvm-dis
+LLVM_OPT 	:= $(LLVM_BIN)/opt
+LLVM_LLI 	:= $(LLVM_BIN)/lli
+LLVM_LLC 	:= $(LLVM_BIN)/llc
+LLVM_LINK	:= $(LLVM_BIN)/llvm-link
+LLVM_MC	  	:= $(LLVM_BIN)/llvm-mc
+
+PROJECT_BUILD_DIR = $(COAST_ROOT)/projects/build/
+rwildcard=$(wildcard $1$2)$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+PROJECT_LIBS := $(call rwildcard,$(PROJECT_BUILD_DIR),*.so)
+OPT_LIBS_LOAD = -load $(PROJECT_BUILD_DIR)/errorBlocks/ErrorBlocks.so \
+-load $(PROJECT_BUILD_DIR)/dataflowProtection/DataflowProtection.so $(foreach lib, $(PROJECT_LIBS) , -load $(lib))
+
+INC_FILES=$(wildcard *.inc)
+
+
+ifeq ($(BOARD), $(BOARD_HIFIVE1))
+
+include $(LEVEL)/makefiles/Makefile.compile.hiFive1
+
+else ifeq ($(BOARD), $(BOARD_X86))
+
+include $(LEVEL)/makefiles/Makefile.compile.x86
+
+else ifeq ($(BOARD), $(BOARD_LLI))
+
+include $(LEVEL)/makefiles/Makefile.compile.llvmLLI
+
+else ifeq ($(BOARD), $(BOARD_PYNQ))
+
+include $(LEVEL)/makefiles/Makefile.compile.pynq
+
+else ifeq ($(BOARD), $(BOARD_ULTRA96))
+
+include $(LEVEL)/makefiles/Makefile.compile.ultra96
+
+else ifeq ($(BOARD), $(BOARD_TMS1224))
+
+include $(LEVEL)/makefiles/Makefile.compile.hercules
+
+else ifeq ($(BOARD), $(BOARD_TMS4357))
+
+include $(LEVEL)/makefiles/Makefile.compile.hercules
+
+else ifeq ($(BOARD), $(BOARD_MSP432))
+
+include $(LEVEL)/makefiles/Makefile.compile.msp432
+
+else
+
+exe:
+	@echo "No compiler for board"
+endif

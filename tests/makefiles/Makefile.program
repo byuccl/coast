@@ -1,0 +1,92 @@
+# to get rid of some annoying output
+SKIP_SECTION	:= sed '/\tsection,/d'
+LLI_ARGS		?=
+
+#------------------------------------------------------------------------------
+# stuff for Hercules
+# https://stackoverflow.com/questions/7656425/makefile-ifeq-logical-or
+ifeq ($(BOARD),$(filter $(BOARD), $(BOARD_TMS1224) $(BOARD_TMS4357)))
+TMP_WORKSPACE 		= $(shell mktemp -d)
+DEBUGSERVER_ROOT 	= $(CCS_ROOT)/DebugServer
+DSS_OPTIONS 		= -nosplash -application com.ti.ccstudio.apps.runScript \
+	-product com.ti.ccstudio.branding.product -dss.rhinoArgs -data $(TMP_WORKSPACE)
+FILE_PATH = $(BOARD_DIR)/load_program.js
+
+.DELETE_ON_ERROR:
+	$(TMP_WORKSPACE)
+endif
+#------------------------------------------------------------------------------
+
+program:
+ifeq ($(BOARD), $(BOARD_HIFIVE1))
+	# Set OOCD_FTDI_LOCATION to specify a physical USB port
+	# Programming $(TARGET)
+
+	$(FREEDOM_SDK)/work/build/openocd/prefix/bin/openocd \
+	-f $(BOARD_DIR)/openocd_hifive1.cfg & \
+	$(FREEDOM_SDK)/work/build/riscv-gnu-toolchain/riscv64-unknown-elf/prefix/bin/riscv64-unknown-elf-gdb \
+	$(TARGET) \
+	--batch \
+	-ex "set remotetimeout 240" \
+	-ex "target extended-remote localhost:$(OOCD_GDB_PORT)" \
+	-ex "monitor reset halt" \
+	-ex "monitor flash protect 0 64 last off" \
+	-ex "load" \
+	-ex "monitor resume" \
+	-ex "monitor shutdown" \
+	-ex "quit" \
+	&& echo "Successfully uploaded 'hello' to freedom-e300-hifive1."
+
+else ifeq ($(BOARD), $(BOARD_X86))
+	@echo -e $(COLOR_YELLOW)Executing$(NO_COLOR) $(TARGET).out
+	@./$(TARGET).out
+
+else ifeq ($(BOARD), $(BOARD_LLI))
+	@echo -e $(COLOR_YELLOW)Executing$(NO_COLOR) $(TARGET).ll
+	@$(LLVM_LLI) $(LLI_ARGS) $(TARGET).ll
+
+else ifeq ($(BOARD), $(BOARD_PYNQ))
+	ELF_FILE=./build/$(TARGET) \
+	JTAG_CABLE_FILTER="Xilinx PYNQ-Z1 *" \
+	$(XILINX_SDK)/bin/xsdk -batch  $(BOARD_DIR)/sw/run_elf.tcl | $(SKIP_SECTION)
+
+else ifeq ($(BOARD), $(BOARD_ULTRA96))
+	ELF_FILE=./build/$(TARGET) \
+	JTAG_CABLE_FILTER="Avnet USB-to-JTAG/UART Pod V1 1234-oj1A" \
+	$(XILINX_SDK)/bin/xsdk -batch $(BOARD_DIR)/sw/run_elf.tcl | $(SKIP_SECTION)
+
+# arguments for load_program.js are
+# executable path, board config path
+else ifeq ($(BOARD), $(BOARD_TMS1224))
+	@$(DEBUGSERVER_ROOT)/../../eclipse/ccstudio $(DSS_OPTIONS) "$(FILE_PATH) ./build/$(TARGET).out $(PROJ_DIR)/targetConfigs/TMS570LS1224.ccxml"
+	@rm -rf $(TMP_WORKSPACE)
+
+else ifeq ($(BOARD), $(BOARD_TMS4357))
+	@$(DEBUGSERVER_ROOT)/../../eclipse/ccstudio $(DSS_OPTIONS) "$(FILE_PATH) ./Debug/$(TARGET).out $(PROJ_DIR)/targetConfigs/TMS570LC43xx.ccxml"
+	@rm -rf $(TMP_WORKSPACE)
+
+else
+	@echo "Invalid board";
+endif
+
+program_mp: export PROGRAM_MP=1
+program_mp: program
+
+
+configure:
+ifeq ($(BOARD), $(BOARD_ULTRA96))
+	BITSTREAM=$(BOARD_DIR)/hw/ultra96_baremetal.bit \
+	JTAG_BOARD_FILTER="localhost:3121/xilinx_tcf/Xilinx/1234-oj1A" \
+	JTAG_DEVICE_INDEX=0 \
+	JTAG_REGISTER_DONE_BIT=REGISTER.IR.BIT05_DONE \
+	$(VIVADO)/bin/vivado -mode batch -source $(BOARDS)/program_bit.tcl -notrace
+
+else ifeq ($(BOARD), $(BOARD_PYNQ))
+	BITSTREAM=$(BOARD_DIR)/hw/system_wrapper.bit \
+	JTAG_BOARD_FILTER="localhost:3121/xilinx_tcf/Digilent/*" \
+	JTAG_DEVICE_INDEX=1 \
+	JTAG_REGISTER_DONE_BIT=REGISTER.CONFIG_STATUS.BIT14_DONE_PIN \
+	$(VIVADO)/bin/vivado -mode batch -source $(BOARDS)/program_bit.tcl -notrace
+else
+	@echo "Invalid board";
+endif

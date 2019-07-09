@@ -6,13 +6,17 @@
 #include <deque>
 #include <vector>
 #include <string>
+#include <list>
 
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/Analysis/AliasSetTracker.h>
+#include <llvm-c/Core.h>
 
 //Arrays from function pointer are partially developed
 #define NO_FN_PTR_ARRAY
@@ -33,11 +37,12 @@ using namespace llvm;
 //----------------------------------------------------------------------------//
 void dataflowProtection::populateValuesToClone(Module& M) {
 	instsToClone.clear();
-	globalsToClone.clear();
+	// globalsToClone.clear();
 	constantExprToClone.clear();
 
 	for(auto F : fnsToClone) {
-		if(std::find(coarseGrainedUserFunctions.begin(), coarseGrainedUserFunctions.end(), F->getName()) != coarseGrainedUserFunctions.end()){
+		if (std::find(coarseGrainedUserFunctions.begin(), coarseGrainedUserFunctions.end(),
+				F->getName()) != coarseGrainedUserFunctions.end()) {
 //			errs() << F->getName() << " is coarse grained. Not replicating.\n";
 			continue;
 		}
@@ -45,14 +50,14 @@ void dataflowProtection::populateValuesToClone(Module& M) {
 		for (auto & bb : *F) {
 			for (auto & I : bb) {
 
-				if(willBeSkipped(&I)){
+				if (willBeSkipped(&I)) {
 //					errs() << "Not cloning instruction " << I << "\n";
 					continue;
 				}
 
 				//If store instructions not cloned, skip them
-				if(noMemReplicationFlag){
-					if(dyn_cast<StoreInst>(&I)){
+				if (noMemReplicationFlag) {
+					if (dyn_cast<StoreInst>(&I)) {
 						continue;
 					}
 				}
@@ -60,7 +65,7 @@ void dataflowProtection::populateValuesToClone(Module& M) {
 				if (CallInst * ci = dyn_cast<CallInst>(&I)) {
 
 					//Don't touch/clone inline assembly
-					if(ci->isInlineAsm())
+					if (ci->isInlineAsm())
 						continue;
 
 					//Clone constants in the function call
@@ -72,21 +77,62 @@ void dataflowProtection::populateValuesToClone(Module& M) {
 					}
 
 					// skip bitcasts and print a warning message, because this might skip more than bitcasts
-					if(!isIndirectFunctionCall(ci, "populateValuesToClone",false)){
-						if(std::find(skipLibCalls.begin(), skipLibCalls.end(), ci->getCalledFunction()->getName()) != skipLibCalls.end()){
-	//						errs() << "Skipping the libcall " << ci->getCalledFunction()->getName() << "\n";
+					if (!isIndirectFunctionCall(ci, "populateValuesToClone",false)) {
+						Function* cF = ci->getCalledFunction();
+						if (std::find(skipLibCalls.begin(), skipLibCalls.end(),
+								cF->getName()) != skipLibCalls.end()) {
+//							errs() << "Skipping the libcall " << cF->getName() << "\n";
 							continue;
 						}
 
 						//Only replicate coarseGrained user functions
-						if(!(ci->getCalledFunction()->hasExternalLinkage() &&
-								ci->getCalledFunction()->isDeclaration())){
-							if(std::find(coarseGrainedUserFunctions.begin(), coarseGrainedUserFunctions.end(), ci->getCalledFunction()->getName()) == coarseGrainedUserFunctions.end()){
-	//							errs() << ci->getCalledFunction()->getName() << " is coarse-grained user function\n";
+						if ( !(cF->hasExternalLinkage() && cF->isDeclaration()) ) {
+							if (std::find(coarseGrainedUserFunctions.begin(), coarseGrainedUserFunctions.end(),
+									cF->getName()) == coarseGrainedUserFunctions.end()) {
+//								errs() << cF->getName() << " is coarse-grained user function\n";
 								continue;
 							}
 						}
+					} else {	// it is an indirect function call
+
+						Value* calledValue = ci->getCalledValue();
+//						Value* calledValue = ci->getOperand(0);
+
+						if (auto* cexpr = dyn_cast<ConstantExpr>(calledValue)) {
+
+							//then see if we've got a name for a function in there
+							if (Function* indirectF = dyn_cast<Function>(calledValue->stripPointerCasts())) {
+								StringRef indirectName = indirectF->getName();
+//								errs() << "The name of the indirect function called is " << indirectName << "\n";
+
+								//perform the same checks as above for the function name
+								if (std::find(skipLibCalls.begin(), skipLibCalls.end(),
+										indirectF->getName()) != skipLibCalls.end()) {
+									continue;
+								}
+								if ( !(indirectF->hasExternalLinkage() && indirectF->isDeclaration()) ) {
+									if (std::find(coarseGrainedUserFunctions.begin(), coarseGrainedUserFunctions.end(),
+											indirectName) == coarseGrainedUserFunctions.end()) {
+										continue;
+									}
+								}
+							}
+
+							//see if we've got a bitcast
+							if (cexpr->isCast()) {
+								errs() << "We have found a bitcast:\n";
+								errs() << "\t" << *calledValue << "\n";
+							}
+
+						} else {		//if not, print some kind of warning message
+							if (verboseFlag) {
+								errs() << warn_string << " unidentified indirect function call is being added to the clone list:\n";
+								errs() << *calledValue << "\n";
+							}
+						}
+
 					}
+
 				}
 
 				//We don't clone terminators
@@ -104,6 +150,11 @@ void dataflowProtection::populateValuesToClone(Module& M) {
 					}
 				}
 
+				//don't clone landingpad instructions; there can only be one at the head of a basic block
+				if (isa<LandingPadInst>(&I)) {
+					continue;
+				}
+
 				instsToClone.insert(&I);
 			}
 		}
@@ -112,13 +163,13 @@ void dataflowProtection::populateValuesToClone(Module& M) {
 	for (GlobalVariable & g : M.getGlobalList()) {
 		StringRef globalName = g.getName();
 
-		if(globalName.startswith("llvm")){
+		if (globalName.startswith("llvm")) {
 //			errs() << "WARNING: not duplicating global value " << g.getName() << ", assuming it is llvm-created\n";
 			continue;
 		}
 
 		//Don't clone ISR function pointers
-		if(globalName.startswith("__vector") || globalName.startswith("isr_")){
+		if (globalName.startswith("__vector") || globalName.startswith("isr_")) {
 //			errs() << "WARNING: not duplicating global value " << g.getName() << ", assuming it is llvm-created\n";
 			continue;
 		}
@@ -127,12 +178,14 @@ void dataflowProtection::populateValuesToClone(Module& M) {
 		if (g.hasExternalLinkage() && !g.hasInitializer())
 			continue;
 
-		if(globalsToSkip.find(&g) != globalsToSkip.end()){
+		if (globalsToSkip.find(&g) != globalsToSkip.end()) {
 //			errs() << "WARNING: not duplicating global variable " << g.getName() << "\n";
 			continue;
 		}
 
-		globalsToClone.insert(&g);
+		if (xMR_default) {
+			globalsToClone.insert(&g);
+		}
 	}
 
 }
@@ -140,12 +193,13 @@ void dataflowProtection::populateValuesToClone(Module& M) {
 //----------------------------------------------------------------------------//
 // Modify functions
 //----------------------------------------------------------------------------//
-void dataflowProtection::populateFnWorklist(Module& M){
+void dataflowProtection::populateFnWorklist(Module& M) {
 	//Populate a set with all user-defined functions
 	std::set<Function*> fnList;
-	for (auto & fn_it : M){
+	for (auto & fn_it : M) {
 		//check for unsupported functions
-		if(std::find(unsupportedFunctions.begin(), unsupportedFunctions.end(), fn_it.getName()) != unsupportedFunctions.end()){
+		if (std::find(unsupportedFunctions.begin(), unsupportedFunctions.end(),
+				fn_it.getName()) != unsupportedFunctions.end()) {
 			errs() << "ERROR: \n    " << fn_it.getName() << ": function is not supported!\n\n\n";
 			std::exit(-1);
 			assert(false && "Function is not supported!");
@@ -157,13 +211,15 @@ void dataflowProtection::populateFnWorklist(Module& M){
 		}
 
 		//Don't erase ISRs
-		if(isISR(fn_it)){
+		if (isISR(fn_it)) {
 			continue;
 		}
 
-		if(std::find(coarseGrainedUserFunctions.begin(),coarseGrainedUserFunctions.end(),fn_it.getName())!=coarseGrainedUserFunctions.end()){
+		if (std::find(coarseGrainedUserFunctions.begin(), coarseGrainedUserFunctions.end(),
+				fn_it.getName())!=coarseGrainedUserFunctions.end()) {
 			continue;
 		}
+
 		fnList.insert(&fn_it);
 	}
 
@@ -171,21 +227,21 @@ void dataflowProtection::populateFnWorklist(Module& M){
 	//Get a list of all the functions that should not be modified because they
 	//are related to fnToSkip
 	bool fnsAdded = true;
-	while(fnsAdded){
+	while (fnsAdded) {
 		fnsAdded = false;
-		for(auto & F : fnsToSkip){
-			for(auto & bb : *F){
-				for(auto & I : bb){
-					if(CallInst* CI = dyn_cast<CallInst>(&I)){
-						if(CI->isInlineAsm()){
+		for (auto & F : fnsToSkip) {
+			for (auto & bb : *F) {
+				for (auto & I : bb) {
+					if (CallInst* CI = dyn_cast<CallInst>(&I)) {
+						if (CI->isInlineAsm()) {
 							continue;
 						}
 						//Skip any thing that doesn't have a called function, print warnings
-						if(isIndirectFunctionCall(CI, "populateFnWorklist"))
+						if (isIndirectFunctionCall(CI, "populateFnWorklist"))
 							continue;
-						if(CI->getCalledFunction()->isDeclaration()){
+						if (CI->getCalledFunction()->isDeclaration()){
 							continue;
-						} else if(fnsToSkip.find(CI->getCalledFunction())==fnsToSkip.end()){
+						} else if(fnsToSkip.find(CI->getCalledFunction())==fnsToSkip.end()) {
 							fnsToSkip.insert(CI->getCalledFunction());
 							fnsAdded = true;
 						}
@@ -196,7 +252,7 @@ void dataflowProtection::populateFnWorklist(Module& M){
 	}
 
 	//Iterate through the fnsToErase list and remove them from the main function list
-	for(auto & e : fnsToSkip){
+	for (auto & e : fnsToSkip) {
 		fnList.erase(e);
 	}
 
@@ -205,27 +261,28 @@ void dataflowProtection::populateFnWorklist(Module& M){
 	fnsAdded = true;
 	Function* mainF = M.getFunction("main");
 
-	if(xMR_default){
-		if(!mainF) { //If we don't have main, insert all
+	if (xMR_default) {
+		if (!mainF) { //If we don't have main, insert all
 			fnsToClone = fnList;
-		} else{
+		} else {
 			fnsToClone.insert(mainF);
-			while(fnsAdded){
+			while (fnsAdded) {
 				fnsAdded = false;
-				for(auto & F : fnsToClone){
-					for(auto & bb : *F){
-						for(auto & I : bb){
-							if(CallInst* CI = dyn_cast<CallInst>(&I)){
-								if(CI->isInlineAsm())
+				for (auto & F : fnsToClone) {
+					for (auto & bb : *F) {
+						for (auto & I : bb) {
+							if (CallInst* CI = dyn_cast<CallInst>(&I)) {
+								if (CI->isInlineAsm())
 									continue;
 								// skip any thing that doesn't have a called function and print warning
-								if(isIndirectFunctionCall(CI, "populateFnWorklist"))
+								if (isIndirectFunctionCall(CI, "populateFnWorklist"))
 									continue;
-								if(CI->getCalledFunction()->isDeclaration())
+								if (CI->getCalledFunction()->isDeclaration())
 									continue;
-								else if(std::find(fnsToSkip.begin(), fnsToSkip.end(), CI->getCalledFunction()) != fnsToSkip.end())
+								else if (std::find(fnsToSkip.begin(), fnsToSkip.end(),
+										CI->getCalledFunction()) != fnsToSkip.end())
 									continue;
-								else if(fnsToClone.find(CI->getCalledFunction())==fnsToClone.end()){
+								else if (fnsToClone.find(CI->getCalledFunction())==fnsToClone.end()) {
 									fnsToClone.insert(CI->getCalledFunction());
 									fnsAdded = true;
 								}
@@ -238,14 +295,15 @@ void dataflowProtection::populateFnWorklist(Module& M){
 	}
 
 	//Get a list of all functions that are meant to be both cloned and skipped
-	for(auto & skip_it: fnsToSkip){
-		if(fnsToClone.find(skip_it)!=fnsToClone.end())
+	for (auto & skip_it: fnsToSkip) {
+		if (fnsToClone.find(skip_it)!=fnsToClone.end())
 			fnsToCloneAndSkip.insert(skip_it);
 	}
 
 	//Make sure coarse grained functions aren't modified
-	for(auto it : fnsToClone){
-		if(std::find(coarseGrainedUserFunctions.begin(),coarseGrainedUserFunctions.end(),it->getName())!=coarseGrainedUserFunctions.end()){
+	for (auto it : fnsToClone){
+		if (std::find(coarseGrainedUserFunctions.begin(), coarseGrainedUserFunctions.end(),
+				it->getName())!=coarseGrainedUserFunctions.end()) {
 			fnsToClone.erase(it);
 		}
 	}
@@ -257,25 +315,61 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 
 	//If we aren't replicating everything by default then don't update fn sig
 	//There won't be any clones to pass into it
-	if(!xMR_default){
-		return;
+	// if(!xMR_default){
+	// 	return;
+	// }
+
+	//a list of aggregates which are users of functions
+	// these will be used later to skip users of functions that are not CallInsts
+	std::list<ConstantAggregate*> skipAggList;
+
+	for (auto g_it = M.global_begin(); g_it != M.global_end(); g_it++) {
+		//we're looking for a particular global that causes problems
+		if (g_it->getName() == "llvm.global_ctors") {
+			//all the operands of this global
+			for (auto op = g_it->op_begin(); op != g_it->op_end(); op++) {
+//				errs() << *(*op) << "\n";
+				//see if it's a ConstantArray
+				if (auto cnst = dyn_cast<ConstantArray>(*op)) {
+					//look at all of its operands
+					for (auto op2 = cnst->op_begin(); op2 != cnst->op_end(); op2++) {
+//						errs() << *(*op2) << "\n";
+						//see if the operand of the array is an aggregate type
+						if (auto agg = dyn_cast<ConstantAggregate>(*op2)) {
+							//look at all the operands of the aggregate
+							for (auto op3 = agg->op_begin(); op3 != agg->op_end(); op3++) {
+								//if one of these operands is a function, then keep track of the aggregate
+								if (auto opf = dyn_cast<Function>(*op3)) {
+									skipAggList.push_back(agg);
+//									errs() << opf->getName() << "\n";
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
-	for(auto F : fnsToClone) {
+	for (auto F : fnsToClone) {
 		if (!F->isDeclaration()) {
 			functionsToFix.push_back(F);
 		}
 	}
 
 	for (auto F : functionsToFix) {
-		unsigned int numArgs = F->getArgumentList().size();
+		unsigned int numArgs = F->arg_size();
 
-		if(isISR(*F)){
+		if (isISR(*F)) {
 			continue;
 		}
 
-		if(std::find(fnsToSkip.begin(),fnsToSkip.end(),F) != fnsToSkip.end()){
+		if (std::find(fnsToSkip.begin(),fnsToSkip.end(),F) != fnsToSkip.end()) {
 			continue;
+		}
+
+		if (verboseFlag) {
+			errs() << "Adding clone arguments to function: " << F->getName() << "\n";
 		}
 
 		std::vector<bool> cloneArg(numArgs, false);
@@ -283,19 +377,58 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 		// See if what is passed in has a clone
 		for (auto u : F->users()) {
 			//Ignore global annotations - globals containing bitcasts
-			if(auto ce = dyn_cast<ConstantExpr>(u)){
-				if(ce->isCast()){
+			if (auto ce = dyn_cast<ConstantExpr>(u)) {
+				if (ce->isCast()) {
 //					errs() << "WARNING: In cloneFnArgs in cloning.cpp\n";
 //					errs() << "    " << *u << " is a user/cast of fn " << F->getName() << ", skipping it\n";
 					continue;
 				}
 			}
 
+			//see if it's used in an aggregate type constructor global variable
+			if (std::find(skipAggList.begin(), skipAggList.end(), u) != skipAggList.end()) {
+//				errs() << info_string << " Skipping " << *u << "\n";
+				continue;
+			}
+
+			//check for aliases and skip them
+			if (isa<GlobalAlias>(u)) {
+				if (verboseFlag) {
+					errs() << info_string << " Skipping global alias in cloneFunctionArguments()\n";
+				}
+				continue;
+			}
+//			for (auto aliasIterator = M.alias_begin(); aliasIterator != M.alias_end(); aliasIterator++) {
+//				errs() << *aliasIterator << "\n";
+//			}
+
+			//check for invoke instructions
+			if (InvokeInst* invInst = dyn_cast<InvokeInst>(u)) {
+				if (verboseFlag) {
+					errs() << info_string << " Synchronizing on an InvokeInst\n";
+//					errs() << *u << "\n";
+				}
+				/*
+				 * The only functions called by an invoke instruction that can be protected are
+				 * user-defined functions. If this is a library call, it must not be touched,
+				 * because we can't change the body of library functions, and invoke instructions
+				 * are treated as terminator instructions, so we can't just replicate the call.
+				 * However, library calls shouldn't show up in this function.
+				 */
+
+				// clone the operands
+				for (unsigned int i = 0; i < invInst->getNumArgOperands(); i++) {
+					if (willBeCloned(invInst->getArgOperand(i))) {
+						cloneArg[i] = true;
+					}
+				}
+				continue;
+			}
+
 			CallInst * callInst = dyn_cast<CallInst>(u);
 
-
 			//Handle arrays of function pointers by marking what should be modified
-			if(ConstantArray* ca = dyn_cast<ConstantArray>(u)){
+			if (ConstantArray* ca = dyn_cast<ConstantArray>(u)) {
 				#ifndef NO_FN_PTR_ARRAY
 				for(int i=0; i<ca->getNumOperands(); i++){
 					if(ca->getOperand(i)->getName() == F->getName()){
@@ -311,13 +444,15 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 			}
 
 
-			if(!callInst){
-				errs() << "ERROR: User is not a CallInst!\n\t" << *u << "\n\n";
+			if (!callInst) {
+				errs() << err_string << " User is not a CallInst!\n" << *u << "\n";
+				errs() << "User of function " << F->getName() << "\n";
+				errs() << "Type: " << *(u->getType()) << "\n\n";
 			}
 			assert(callInst && "User is not a call instruction");
 
 			for (unsigned int i = 0; i < callInst->getNumArgOperands(); i++) {
-				if (willBeCloned(callInst->getArgOperand(i))){
+				if (willBeCloned(callInst->getArgOperand(i))) {
 					cloneArg[i] = true;
 				}
 			}
@@ -340,7 +475,7 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 			params.push_back(F->getFunctionType()->getParamType(i));
 			if (cloneArg[i]){
 				params.push_back(F->getFunctionType()->getParamType(i));
-				if(TMR){
+				if (TMR) {
 					params.push_back(F->getFunctionType()->getParamType(i));
 				}
 			}
@@ -358,6 +493,7 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 			Fname= F->getName().str() + "_TMR";
 		Constant * c = M.getOrInsertFunction(Fname, Ftype);
 		Function * Fnew = dyn_cast<Function>(c);
+
 		assert(Fnew && "New function is non-void");
 		newFunctions.push_back(Fnew);
 
@@ -381,7 +517,7 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 				Value* v1 = &*argItNew;
 
 				Value* v2;
-				if(TMR){
+				if (TMR) {
 					argItNew++;
 					argItNew->setName(argIt->getName() + "_TMR");
 					v2 = &*argItNew;
@@ -421,8 +557,8 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 		// Replace all function calls
 		for (auto u : F->users()) {
 			//Check for bitcasts in case of annotations
-			if(auto ce = dyn_cast<ConstantExpr>(u)){
-				if(ce->isCast()){
+			if (auto ce = dyn_cast<ConstantExpr>(u)) {
+				if (ce->isCast()) {
 					continue;
 				}
 			}
@@ -433,11 +569,11 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 
 			//Account for arrays of fn pointers
 			unsigned int j = 0;
-			if(ConstantArray* ca = dyn_cast<ConstantArray>(u)){
-				for(int i=0; i<ca->getNumOperands(); i++){
-					if(ca->getOperand(i)->getName() == F->getName()){
+			if (ConstantArray* ca = dyn_cast<ConstantArray>(u)) {
+				for (int i=0; i<ca->getNumOperands(); i++) {
+					if (ca->getOperand(i)->getName() == F->getName()) {
 						int index = -1;
-						for(auto arg=F->arg_begin(); arg!=F->arg_end(); arg++){
+						for (auto arg=F->arg_begin(); arg!=F->arg_end(); arg++) {
 							index++;
 							args.push_back(dyn_cast<Value>(arg));
 							if (cloneArg[index]) {
@@ -446,7 +582,7 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 								}
 								args.push_back(dyn_cast<Value>(arg));
 								j++;
-								if(TMR){
+								if (TMR) {
 									args.push_back(dyn_cast<Value>(arg));
 									j++;
 								}
@@ -458,12 +594,11 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 					}
 				}
 
-			} else{
-				CallInst* callInst = dyn_cast<CallInst>(u);
+			} else if (CallInst* callInst = dyn_cast<CallInst>(u)) {
 				assert(callInst && "Replacing function calls in cloneFnArgs");
 
 				Function* parentFn = callInst->getParent()->getParent();
-				if(fnsToClone.find(parentFn)==fnsToClone.end()){
+				if (fnsToClone.find(parentFn)==fnsToClone.end()) {
 					continue;
 				}
 
@@ -476,7 +611,7 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 						}
 						args.push_back(argOrig);
 						j++;
-						if(TMR){
+						if (TMR) {
 							args.push_back(argOrig);
 							j++;
 						}
@@ -491,12 +626,64 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 						Twine(callInst->getName()), (Instruction*) callInst);
 
 				//Deal with function calls inside function args when casted - not recognized as callInsts
-				for(auto ops : newCallInst->operand_values()){
-					if(auto ce = dyn_cast<ConstantExpr>(ops)){
-						if(ce->isCast()){
+				for (auto ops : newCallInst->operand_values()) {
+					if (auto ce = dyn_cast<ConstantExpr>(ops)) {
+						if (ce->isCast()) {
 							assert(ce->getNumOperands() == 1 && "Setting the arg of a cast");
 							Function* oldFn = dyn_cast<Function>(ce->getOperand(0));
-							if(functionMap[oldFn]){
+							if (functionMap[oldFn]) {
+								ce->setOperand(0,functionMap[oldFn]);
+							}
+						}
+					}
+				}
+
+				//if there's debug information for the call, preserve it
+				if (auto dbgLoc = callInst->getDebugLoc()) {
+					newCallInst->setDebugLoc(dbgLoc);
+				}
+
+				// Replace all uses of the original call instruction with the new one
+				callInst->replaceAllUsesWith(newCallInst);
+				callInst->eraseFromParent();
+			} else if (InvokeInst* invInst = dyn_cast<InvokeInst>(u)) {
+				assert(invInst && "Replacing function calls in cloneFnArgs");
+
+				Function* parentFn = invInst->getParent()->getParent();
+				if (fnsToClone.find(parentFn)==fnsToClone.end()) {
+					continue;
+				}
+
+				for (unsigned int i = 0; i < numArgs; i++, j++) {
+					Value * argOrig = invInst->getArgOperand(i);
+					args.push_back(argOrig);
+					if (cloneArg[i]) {
+						if (willBeCloned(argOrig)) {
+							argNumsCloned[Fnew].push_back(j);
+						}
+						args.push_back(argOrig);
+						j++;
+						if (TMR) {
+							args.push_back(argOrig);
+							j++;
+						}
+					}
+				}
+
+				ArrayRef<Value*>* callArgs;
+				callArgs = new ArrayRef<Value*>(args);
+
+				//The casting here is to stop from complaining that the Create call doesn't have the right types
+				InvokeInst* newInvInst = InvokeInst::Create((Value*) Fnew, invInst->getNormalDest(),
+						invInst->getUnwindDest(), *callArgs, Twine(invInst->getName()), (Instruction*) invInst);
+
+				//Deal with function calls inside function args when casted - not recognized as callInsts
+				for (auto ops : newInvInst->operand_values()) {
+					if (auto ce = dyn_cast<ConstantExpr>(ops)) {
+						if (ce->isCast()) {
+							assert(ce->getNumOperands() == 1 && "Setting the arg of a cast");
+							Function* oldFn = dyn_cast<Function>(ce->getOperand(0));
+							if (functionMap[oldFn]) {
 								ce->setOperand(0,functionMap[oldFn]);
 							}
 						}
@@ -504,10 +691,17 @@ void dataflowProtection::cloneFunctionArguments(Module & M) {
 				}
 
 				// Replace all uses of the original call instruction with the new one
-				callInst->replaceAllUsesWith(newCallInst);
-				callInst->eraseFromParent();
+				invInst->replaceAllUsesWith(newInvInst);
+				invInst->eraseFromParent();
+			} else {
+				assert(false && "wrong type!\n");
 			}
+
 		}
+
+		//update the metadata describing the new function
+		cloneMetadata(M, Fnew);
+
 	}
 
 	#ifndef NO_FN_PTR_ARRAY
@@ -576,10 +770,10 @@ void dataflowProtection::updateCallInsns(Module & M) {
 		for (auto & bb : F) {
 			for (auto & I : bb) {
 				if (CallInst * CI = dyn_cast<CallInst>(&I)) {
+
 					Function * Fcalled = CI->getCalledFunction();
 					if (argNumsCloned.find(Fcalled) != argNumsCloned.end()) {
 						auto argsCloned = argNumsCloned[Fcalled];
-
 						for (auto argNum : argsCloned) {
 							Value* op = CI->getArgOperand(argNum);
 							if (isCloned(op)) {
@@ -590,6 +784,28 @@ void dataflowProtection::updateCallInsns(Module & M) {
 								if(TMR){
 									clone2 = getClone(op).second;
 									CI->setArgOperand(argNum + 2, clone2);
+								}
+							}
+						}
+					}
+				}
+
+				//also need to update Invoke instructions
+				if (InvokeInst* invInst = dyn_cast<InvokeInst>(&I)) {
+					Function* Fcalled = invInst->getCalledFunction();
+					if (argNumsCloned.find(Fcalled) != argNumsCloned.end()) {
+						auto argsCloned = argNumsCloned[Fcalled];
+
+						for (auto argNum : argsCloned) {
+							Value* op = invInst->getArgOperand(argNum);
+							if (isCloned(op)) {
+								Value* clone1 = getClone(op).first;
+								invInst->setArgOperand(argNum + 1, clone1);
+
+								Value* clone2;
+								if(TMR){
+									clone2 = getClone(op).second;
+									invInst->setArgOperand(argNum + 2, clone2);
 								}
 							}
 						}
@@ -641,6 +857,7 @@ bool dataflowProtection::cloneInsns() {
 				if(noMemReplicationFlag){ //Not replicating memory
 					//If we aren't replicating memory then we should not change the load inst. address
 					if(dyn_cast<LoadInst>(clone.first)){ //Don't change load instructions
+						assert(clone.first && "Clone exists when updating operand");
 						clone.first->setOperand(i, op);
 						if(TMR){
 							assert(clone.second && "Clone exists when updating operand");
@@ -660,6 +877,7 @@ bool dataflowProtection::cloneInsns() {
 				}
 			} else if(ConstantExpr* ce = dyn_cast<ConstantExpr>(op)){
 				//Don't need to update references to constant ints
+				assert(ce && "Null ConstantExpr ce");
 				if(isa<ConstantInt>(ce->getOperand(0))){
 					continue;
 				}
@@ -675,15 +893,53 @@ bool dataflowProtection::cloneInsns() {
 					}
 				}
 
-				Constant* newOp1 = dyn_cast<Constant>(cloneMap[ce->getOperand(0)].first);
+				/*
+				 * check if it's an inline bitcast
+				 * This can occur if the source code has a global array that ends with a series of 0 values
+				 *  Clang will compile the code to use the 'zeroinitializer' directive, which changes the
+				 *  type of the variable. Instead of having something like
+				 *     @array1 = dso_local constant [64 x i8]
+				 *  it will output
+				 *     @array2 = dso_local constant <{ [32 x i8], [32 x i8] }>
+				 * Then the call to accessing an element of this array will look like
+				 * 	   %arrayidx = getelementptr inbounds [64 x i8], [64 x i8]* bitcast (<{ [32 x i8], [32 x i8] }>* @array2 to [64 x i8]*), i64 0, i64 %idxprom
+				 * This only is a problem when the noMemReplication flag, therefore it's OK to skip changing
+				 *  the instruction arguments, since it would all be the same argument anyway.
+				 */
+				if (ce->isCast()) {
+					if (verboseFlag) {
+						errs() << warn_string << ": In cloneInsns() skipping processing cloned ConstantExpr:\n";
+						errs() << " " << *ce << "\n";
+					}
+					continue;
+				}
+
+				// error checking here for things missing in the cloneMap
+				//  if this is NULL, then that means we just inserted the operand
+				//	into the map, and therefore it wasn't in there before
+				// trying to dereference 0 is a bad idea
+				// how did this get in the list, but not in the map?
+				Value* v_temp = cloneMap[ce->getOperand(0)].first;
+				if (v_temp == nullptr) {
+					errs() << err_string << " in CloneInsns!\n";
+					errs() << *ce << "\n";
+				}
+				assert(v_temp && "ConstantExpr is in cloneMap");
+
+				Constant* newOp1 = dyn_cast<Constant>(v_temp);
+				// Constant* newOp1 = dyn_cast<Constant>(cloneMap[ce->getOperand(0)].first);
+				assert(newOp1 && "Null Constant newOp1");
 				Constant* c1 = ce->getWithOperandReplaced(0, newOp1);
 				ConstantExpr* eNew1 = dyn_cast<ConstantExpr>(c1);
+				assert(eNew1 && "Null ConstantExpr eNew1");
 				clone.first->setOperand(i, eNew1);
 
 				if(TMR){
 					Constant* newOp2 = dyn_cast<Constant>(cloneMap[ce->getOperand(0)].second);
+					assert(newOp2 && "Null Constant newOp2");
 					Constant* c2 = ce->getWithOperandReplaced(0, newOp2);
 					ConstantExpr* eNew2 = dyn_cast<ConstantExpr>(c2);
+					assert(eNew2 && "Null ConstantExpr eNew2");
 					clone.second->setOperand(i, eNew2);
 				}
 			} else{
@@ -740,6 +996,12 @@ void dataflowProtection::cloneGlobals(Module & M) {
 	if(noMemReplicationFlag)
 		return;
 
+	if (verboseFlag) {
+		for (auto g: globalsToClone) {
+			errs() << "Cloning global: " << g->getName() << "\n";
+		}
+	}
+
 	// First figure out which globals will be initialized at runtime
 	for (auto g : globalsToClone) {
 		if (std::find(clGlobalsToRuntimeInit.begin(), clGlobalsToRuntimeInit.end(), g->getName().str()) != clGlobalsToRuntimeInit.end()) {
@@ -787,6 +1049,10 @@ GlobalVariable * dataflowProtection::copyGlobal(Module & M, GlobalVariable * g, 
 	GlobalVariable* gNew = new GlobalVariable(M, g->getValueType(), g->isConstant(), g->getLinkage(),
 			initializer, g->getName() + suffix, g);
 	gNew->setUnnamedAddr(g->getUnnamedAddr());
+
+	if (verboseFlag)
+		errs() << "New dupicate global: " << gNew->getName() << "\n";
+
 	return gNew;
 }
 
@@ -835,4 +1101,88 @@ void dataflowProtection::addGlobalRuntimeInit(Module & M) {
 		}
 
 	}
+}
+
+/*
+ * The debug information automatically generated for the new function is nearly identical to the old,
+ *  except that it correctly changes the retainedNodes entry to match the local variables in the body
+ *  of the new function.
+ * This function changes the name of the debug metadata subprogram, and also changes the signature
+ *  to match the changes made in cloneFunctionArguments().
+ */
+void dataflowProtection::cloneMetadata(Module& M, Function* Fnew) {
+	DISubprogram* autoSp = Fnew->getSubprogram();
+//	if there is no debug information there already, then we don't need to fix it
+	if (!autoSp)
+		return;
+
+	LLVMContext & C = M.getContext();
+	DICompileUnit* dcomp = autoSp->getUnit();
+	DIBuilder* DB = new DIBuilder(M, true, dcomp);
+
+	/*
+	 * Operands of the DISubprogram, by index
+	 * 0: scope
+	 * 1: file
+	 * 2: name
+	 * 3: ?
+	 * 4: type
+	 * 5: compile unit
+	 * 6: ?
+	 * 7: retainedNodes
+	 */
+
+	/* Print out all of the operands in the DISubprogram
+ 	for (int i = 0; i < N->getNumOperands(); i+=1) {
+		const MDOperand& mop = N->getOperand(i);
+		if (mop) {
+			MDNode* op = dyn_cast<MDNode>(mop);
+			if (op)
+				errs() << i << ": " << *op << '\n';
+			else
+				errs() << i << ": " << *mop << '\n';
+		} else {
+			errs() << i << ": " << mop << '\n';
+		}
+	} */
+
+	//have to make new types, based on signature of new function
+	DISubroutineType* dtype = autoSp->getType();
+//	errs() << dtype << "\n";
+	DITypeRefArray dtypeArray = dtype->getTypeArray();
+	std::vector<Metadata*> typs;
+
+	// TODO: make this more robust, in case only some arguments were cloned
+	for (unsigned i = 0; i < dtypeArray.size(); i+=1) {
+		DITypeRef t = dtypeArray[i];
+		auto tr = t.resolve();
+		typs.push_back(tr);
+
+		if (tr) {
+//			errs() << *t << "\n";
+			typs.push_back(tr);
+			if (TMR)
+				typs.push_back(tr);
+		}
+		else {
+//			errs() << t << "\n";
+		}
+	}
+
+	ArrayRef<Metadata*> typArray(typs);
+	DITypeRefArray pTypes = DB->getOrCreateTypeArray(typArray);
+
+	DISubroutineType* dtypeNew = DB->createSubroutineType(
+			pTypes,				/* DITypeRefArray, ParameterTypes - return type at 0th index */
+			dtype->getFlags(),	/* Flags */
+			dtype->getCC()		/* Can also specify calling convention */
+	);
+//	errs() << *dtypeNew << "\n";
+
+	autoSp->replaceOperandWith(2, dyn_cast<Metadata>(MDString::get(C, Fnew->getName())));
+	autoSp->replaceOperandWith(4, dyn_cast<Metadata>(dtypeNew));
+	Fnew->setSubprogram(autoSp);
+//	errs() << *autoSp << "\n";
+
+	return;
 }

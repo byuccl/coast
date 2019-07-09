@@ -1,0 +1,190 @@
+################################################################################
+# Sources
+PROJECT_SRC := ${CURDIR}
+CSRCS 		:= $(foreach dir,$(PROJECT_SRC),$(wildcard $(dir)/*.c))
+BUILD_DIR	:= ./build
+
+################################################################################
+# dependencies
+TOOLCHAIN	:= $(XILINX_SDK)/gnu/aarch64/lin/aarch64-none
+TRIPLE 		:= aarch64-none-elf
+GCC_VERSION	:= 7.2.1
+
+LNK_SCRIPT	:= $(BOARD_SW)/lscript.ld
+SPEC_SRC 	:= $(PROJECT_SRC)/Xilinx.spec
+BSP_DIR 	:= $(BOARD_SW)/pynq
+CORE_INC 	:= $(BOARD_SW)/psu_coretexa53_0/include
+
+################################################################################
+# Flags
+LIB_INCS	:= -I"$(TOOLCHAIN)/lib/gcc/$(TRIPLE)/$(GCC_VERSION)/include/" -I"$(TOOLCHAIN)/lib/gcc/$(TRIPLE)/$(GCC_VERSION)/include-fixed/" -I"$(TOOLCHAIN)/include/" -I"$(TOOLCHAIN)/$(TRIPLE)/libc/usr/include/"
+SRC_INCS	:= -nostdinc -I$(CORE_INC) $(LIB_INCS)
+LIB_DIR		:= $(BSP_DIR)
+LIBS		:= -lxil,-lgcc,-lc
+
+CFLAGS 		:= -Wall -std=c99
+CLANG_FLAGS := -fcolor-diagnostics -target $(TRIPLE) $(CFLAGS) -fshort-enums -nostdlib
+
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=aarch64 -mcpu=cortex-a53 -float-abi=hard 
+#-mattr=+vfpv3-d16
+
+MC_FLAGS 	:= -triple=$(TRIPLE) -mcpu=cortex-a53 -target-abi=hard -filetype=obj
+
+################################################################################
+NEW_LINK_F	:= lscript_new.ld
+
+# ANSI escape color codes
+COLOR_BLUE			:= '\033[0;34m'
+COLOR_MAGENTA		:= '\033[0;35m'
+COLOR_YELLOW		:= '\033[0;33m'
+COLOR_GREEN			:= '\033[0;32m'
+COLOR_BLACK			:= '\033[0;30m'
+NO_COLOR			:= '\033[0m'
+HIGHLIGHT			:= '\033[0;7m'
+
+
+################################################################################
+# Top level rule        			                                           #
+################################################################################
+
+exe: $(BUILD_DIR)/$(TARGET).elf
+
+exe_mp: $(BUILD_DIR)/$(TARGET)_0.elf $(BUILD_DIR)/$(TARGET)_1.elf $(BUILD_DIR)/$(TARGET)_2.elf $(BUILD_DIR)/$(TARGET)_3.elf
+
+# make sure our build directory exists
+$(BUILD_DIR)/:
+	@mkdir -p $@
+
+# make sure we have a modified linker file
+SEARCH_TERM	:= __bss_end = .;
+INSERT_TEXT	:= /* added */\n   __bss_start__ = __bss_start;\n   __bss_end__ = __bss_end;
+$(BUILD_DIR)/$(NEW_LINK_F): $(LNK_SCRIPT)
+	@awk "/$(SEARCH_TERM)/{print;print \"$(INSERT_TEXT)\";next}1" $(LNK_SCRIPT) > $(BUILD_DIR)/$(NEW_LINK_F)
+
+
+################################################################################
+# Link everything together                                          		   #
+################################################################################
+LD			:= $(TOOLCHAIN)/bin/$(TRIPLE)-gcc
+LD_FLAGS	:= -Wl,-T -Wl,$(BOARD_SW)/lscript.ld
+LD_LIBS		:= -L$(BUILD_DIR) -L$(BOARD_SW) -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+
+$(BUILD_DIR)/$(TARGET).elf: $(BUILD_DIR)/$(TARGET).o | $(BUILD_DIR)/$(NEW_LINK_F)
+	@echo -e $(COLOR_MAGENTA)linking with libraries $(NO_COLOR)
+	@echo -e '  'flags = $(LD_FLAGS)
+	$(LD) $(LD_FLAGS) $^ -o $@ $(LD_LIBS)
+
+$(BUILD_DIR)/$(TARGET)_%.elf: $(BUILD_DIR)/$(TARGET)_%.o | $(BUILD_DIR)/$(NEW_LINK_F)
+	@echo -e $(COLOR_MAGENTA)linking with libraries $(NO_COLOR)
+	@echo -e '  'flags = $(LD_FLAGS)
+	$(LD) -Wl,-T -Wl,$(BOARD_SW)/lscript_$*.ld $^ -o $@ -L$(BUILD_DIR) -L$(BOARD_SW) -Wl,--start-group,-lxil_$*,-lgcc,-lc,--end-group
+
+
+################################################################################
+# Create object file (machine code) from assembly  			                   #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET).o: $(BUILD_DIR)/$(TARGET).s
+	@echo -e $(COLOR_BLUE)translating to machine code $(NO_COLOR)
+	@echo -e '  'flags = $(MC_FLAGS)
+	@$(LLVM_MC) $< $(MC_FLAGS) -o $@
+
+$(BUILD_DIR)/$(TARGET)_%.o: $(BUILD_DIR)/$(TARGET)_%.s
+	@echo -e $(COLOR_BLUE)translating to machine code $(NO_COLOR)
+	@echo -e '  'flags = $(MC_FLAGS)
+	@$(LLVM_MC) $< $(MC_FLAGS) -o $@
+
+################################################################################
+# Compile to architecture specific assembly			                           #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET).s: $(BUILD_DIR)/$(TARGET).opt.bc
+	@echo -e $(COLOR_MAGENTA)compiling to assembly: llc $(NO_COLOR)
+	@echo -e '  'flags = $(LLC_FLAGS)
+	@$(LLVM_LLC) $(LLC_FLAGS) $< -o=$@
+
+$(BUILD_DIR)/$(TARGET)_%.s: $(BUILD_DIR)/$(TARGET)_%.opt.bc
+	@echo -e $(COLOR_MAGENTA)compiling to assembly: llc $(NO_COLOR)
+	@echo -e '  'flags = $(LLC_FLAGS)
+	@$(LLVM_LLC) $(LLC_FLAGS) $< -o=$@
+
+
+################################################################################
+# Run through the optimizer   			                                       #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET).opt.bc: $(BUILD_DIR)/$(TARGET)_linked.bc
+	@echo -e $(COLOR_BLUE)running through optimizer $(NO_COLOR)
+	@echo -e '  'passes = $(OPT_PASSES)
+	@echo -e '  'flags  = $(OPT_FLAGS)
+	@$(LLVM_DIS) -f $<
+	@$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_DIS) -f $@
+
+$(BUILD_DIR)/$(TARGET)_%.opt.bc: $(BUILD_DIR)/$(TARGET)_%_linked.bc
+	@echo -e $(COLOR_BLUE)running through optimizer $(NO_COLOR)
+	@echo -e '  'passes = $(OPT_PASSES)
+	@echo -e '  'flags  = $(OPT_FLAGS)
+	@$(LLVM_DIS) -f $<
+	@$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_DIS) -f $@
+
+
+################################################################################
+# Linking the modules together			                                       #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET)_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(CSRCS)))
+	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $@
+
+$(BUILD_DIR)/$(TARGET)_0_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc.0,$(notdir $(CSRCS)))
+	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $@
+
+$(BUILD_DIR)/$(TARGET)_1_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc.1,$(notdir $(CSRCS)))
+	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $@
+
+$(BUILD_DIR)/$(TARGET)_2_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc.2,$(notdir $(CSRCS)))
+	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $@
+
+$(BUILD_DIR)/$(TARGET)_3_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc.3,$(notdir $(CSRCS)))
+	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $@
+
+
+################################################################################
+# Rules for .bc compilation			                                           #
+################################################################################
+
+$(BUILD_DIR)/%.bc: $(PROJECT_SRC)/%.c $(MAKEFILES) | $(BUILD_DIR)/
+	@echo -e $(COLOR_BLUE)building $(notdir $@)$(NO_COLOR)
+	@echo -e '  'flags  = $(CLANG_FLAGS)
+	@$(CLANG) -emit-llvm $(CLANG_FLAGS) $(SRC_INCS) $< -c -o $@
+
+$(BUILD_DIR)/%.bc.0: $(PROJECT_SRC)/%.c $(MAKEFILES) | $(BUILD_DIR)/
+	@echo -e $(COLOR_BLUE)building $(notdir $@)$(NO_COLOR)
+	@echo -e '  'flags  = $(CLANG_FLAGS)
+	@$(CLANG) -DCORE=0 -emit-llvm $(CLANG_FLAGS) $(SRC_INCS) $< -c -o $@
+
+$(BUILD_DIR)/%.bc.1: $(PROJECT_SRC)/%.c $(MAKEFILES) | $(BUILD_DIR)/
+	@echo -e $(COLOR_BLUE)building $(notdir $@)$(NO_COLOR)
+	@echo -e '  'flags  = $(CLANG_FLAGS)
+	@$(CLANG) -DCORE=1 -emit-llvm $(CLANG_FLAGS) $(SRC_INCS) $< -c -o $@
+
+$(BUILD_DIR)/%.bc.2: $(PROJECT_SRC)/%.c $(MAKEFILES) | $(BUILD_DIR)/
+	@echo -e $(COLOR_BLUE)building $(notdir $@)$(NO_COLOR)
+	@echo -e '  'flags  = $(CLANG_FLAGS)
+	@$(CLANG) -DCORE=2 -emit-llvm $(CLANG_FLAGS) $(SRC_INCS) $< -c -o $@
+
+$(BUILD_DIR)/%.bc.3: $(PROJECT_SRC)/%.c $(MAKEFILES) | $(BUILD_DIR)/
+	@echo -e $(COLOR_BLUE)building $(notdir $@)$(NO_COLOR)
+	@echo -e '  'flags  = $(CLANG_FLAGS)
+	@$(CLANG) -DCORE=3 -emit-llvm $(CLANG_FLAGS) $(SRC_INCS) $< -c -o $@
+
+.PHONY: clean
+
+clean:
+	@rm -rf $(BUILD_DIR)

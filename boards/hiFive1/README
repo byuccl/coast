@@ -1,0 +1,8 @@
+Machine setup
+--------------
+sudo cp 99-openocd.rules /etc/udev/rules.d/
+
+sudo apt install libusb-1.0-0-dev gawk libmpc-dev texinfo bison flex libz-dev libexpat1-dev autoconf libtool
+
+https://sifive.cdn.prismic.io/sifive%2F9c57065b-6d28-465b-b67d-f416894123a9_hifive1-getting-started-v1.0.2.pdf
+

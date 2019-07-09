@@ -1,0 +1,17 @@
+BOARD_HIFIVE1 = hiFive1
+BOARD_LLI = lli
+BOARD_X86 = x86
+BOARD_ULTRA96 = ultra96
+BOARD_PYNQ = pynq
+BOARD_TMS1224 = tms1224
+BOARD_TMS4357 = tms4357
+BOARD_MSP432  = msp432
+
+BOARD ?= $(BOARD_LLI)
+
+export COAST_ROOT = $(LEVEL)/..
+
+VIVADO = /opt/Xilinx/Vivado/2018.2
+CCS_ROOT = /opt/ti/ccsv8/ccs_base
+export XILINX_SDK = /opt/Xilinx/SDK/2018.2
+FREEDOM_SDK=$(HOME)/freedom_sdk

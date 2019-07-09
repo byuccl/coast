@@ -63,6 +63,13 @@ void dataflowProtection::populateSyncPoints(Module& M) {
 						//Likewise, don't check casted pointers
 						continue;
 					}
+#ifdef SYNC_POINT_FIX
+					// if this is not a cloned instruction
+					else if ( ( (getClone(&I).first == &I) || (getClone(&I).second == &I) ) &&
+							   !noMemReplicationFlag ) {
+						continue;
+					}
+#endif
 					syncPoints.push_back(&I);
 				}
 
@@ -320,6 +327,8 @@ void dataflowProtection::syncStoreInst(StoreInst* currStoreInst, GlobalVariable*
 	} else{
 		Function* currFn = currStoreInst->getParent()->getParent();
 		splitBlocks(cmp, errBlockMap[currFn]);
+		//fix invalidated pointer - see note in processCallSync()
+		startOfSyncLogic[currStoreInst] = currStoreInst;
 	}
 }
 
@@ -349,10 +358,12 @@ void dataflowProtection::processCallSync(CallInst* currCallInst, GlobalVariable*
 	syncHelperMap[currBB] = syncHelperList;
 	bool firstIteration = true;
 	for (unsigned int i = 0; i < cloneableOperandsList.size(); i++) {
+
 		Value* orig = cloneableOperandsList[i];
 
-		if (!isCloned(orig))
+		if (!isCloned(orig)) {
 			continue;
+		}
 		ValuePair clones = getClone(orig);
 
 		//Make sure we're inserting the right type of comparison
@@ -449,6 +460,15 @@ void dataflowProtection::processCallSync(CallInst* currCallInst, GlobalVariable*
 		assert(	reducedCompare && "Call sync compare reduced to a single instruction");
 		syncHelperMap[currBB].pop_back();
 		splitBlocks(reducedCompare,	errBlockMap[currCallInst->getParent()->getParent()]);
+		/*
+		 * splitting the blocks invalidates the previously set value in the map
+		 * startOfSyncLogic, set to be the instruction that compares the operands of the
+		 * function called by the currCallInst. That instruction is deleted from its
+		 * parent BasicBlock, and now the map points to some memory address that we don't
+		 * know what's there. Need to update the map so it just points to the CallInst
+		 * itself instead.
+		 */
+		startOfSyncLogic[currCallInst] = currCallInst;
 	}
 }
 
@@ -463,6 +483,8 @@ void dataflowProtection::syncTerminator(TerminatorInst* currTerminator, GlobalVa
 		}
 	} else if (isa<ResumeInst>(currTerminator)) {
 		//Resume is only for exception handlers, sync always
+	} else if (isa<InvokeInst>(currTerminator)) {
+		//anything special need to go here?
 	} else if (isa<ReturnInst>(currTerminator)) {
 		if (currTerminator->getNumOperands() == 0){ //Returning nothing
 			startOfSyncLogic[currTerminator] = currTerminator;
@@ -493,13 +515,147 @@ void dataflowProtection::syncTerminator(TerminatorInst* currTerminator, GlobalVa
 		//Make sure we're inserting the right type of comparison
 		Instruction::OtherOps cmp_op;
 		CmpInst::Predicate cmp_eq;
-		if (op->getType()->isFPOrFPVectorTy()) {
+		Type* opType = op->getType();
+
+		//if it's a pointer type, is it ever safe to compare return values?
+		// could have been allocated with malloc
+		// you would have to dereference the pointer to compare the insides of it
+		if (opType->isPointerTy()) {
+			if (verboseFlag) {
+				errs() << warn_string << " skipping synchronizing on return instruction of pointer type:\n";
+				errs() << " in " << currTerminator->getParent()->getName() << "\n";
+			}
+			startOfSyncLogic[currTerminator] = currTerminator;
+			return;
+		}
+		//seems to be a problem with the "this" pointer
+
+		if (opType->isFPOrFPVectorTy()) {
 			cmp_op = Instruction::OtherOps::FCmp;
 			cmp_eq = CmpInst::FCMP_UEQ; //Should this be OEQ instead?
-		} else {
+		} else if(opType->isIntOrIntVectorTy()) {
 			cmp_op = Instruction::OtherOps::ICmp;
 			cmp_eq = CmpInst::ICMP_EQ;
+		} else if (opType->isStructTy()) {
+
+//			cmp_op = Instruction::OtherOps::FCmp;
+			//get the size of the struct
+			StructType* sType = dyn_cast<StructType>(opType);
+			uint64_t nTypes = sType->getStructNumElements();
+			//load each of the inner values and get their types
+			//need to get the actual struct value to operate on
+			Value* op0 = currTerminator->getOperand(0);
+			//NOTE: will there ever be more than one operand to worry about?
+			Value* op1 = cloneMap[op0].first;
+			Value* op2 = cloneMap[op0].second;
+//			errs() << *op << "\n" << *op2 << "\n" << *op3 << "\n";
+			unsigned arr[] = {0};
+
+			//we'll need these later
+			SelectInst* eSel[nTypes];
+			int firstTime = 1;
+
+			for (int i = 0; i < nTypes; i+=1) {
+				//type to compare
+				auto eType = sType->getStructElementType(i);
+//				errs() << " Type " << i << ": " << *eType << "\n";
+
+				//index to extract
+				arr[0] = i;
+				auto extractIdx = ArrayRef<unsigned>(arr);
+
+				//names of instructions
+				std::string extractName    = "getToCompare." + std::to_string(i);
+				std::string extractNameDWC = extractName + ".DWC";
+				std::string extractNameTMR = extractName + ".TMR";
+				std::string cmpName = "cmpElement." + std::to_string(i);
+				std::string selName = "selElement." + std::to_string(i);
+
+				//create the ExtractValueInst's
+				ExtractValueInst* extract0 = ExtractValueInst::Create(op0, extractIdx, extractName);
+				ExtractValueInst* extract1 = ExtractValueInst::Create(op1, extractIdx, extractNameDWC);
+				ExtractValueInst* extract2 = ExtractValueInst::Create(op2, extractIdx, extractNameTMR);
+
+				//create the compare instructions
+				if (eType->isFPOrFPVectorTy()) {
+					cmp_op = Instruction::OtherOps::FCmp;
+					cmp_eq = CmpInst::FCMP_UEQ;
+					//TODO: what's with the "ordered" and "unordered" stuff?
+				} else if (eType->isIntOrIntVectorTy()) {
+					cmp_op = Instruction::OtherOps::ICmp;
+					cmp_eq = CmpInst::ICMP_EQ;
+					//compare equal - returns true (1) if equal
+				} else if (eType->isPointerTy()) {
+					//we'll have to skip syncing on this value
+					//delete the extra instructions that aren't being used
+					extract0->deleteValue();
+					extract1->deleteValue();
+					extract2->deleteValue();
+					eSel[i] = nullptr;
+					continue;
+				} else {
+					assert(cmp_op && "valid comparison type assigned");
+				}
+
+				//only set the logic point if it's still valid
+				if (firstTime) {
+					firstTime = 0;
+					startOfSyncLogic[currTerminator] = extract0;
+				}
+				Instruction* eCmp = CmpInst::Create(cmp_op, cmp_eq, extract0, extract1, cmpName);
+				eSel[i] = SelectInst::Create(eCmp, extract0, extract2, selName);
+
+				//debug
+//				errs() << *extract0 << "\n" << *extract1 << "\n" << *extract2 << "\n";
+//				errs() << *eCmp << "\n" << *eSel[i] << "\n";
+
+				//insert the instructions into the basic block
+				extract0->insertBefore(currTerminator);
+				extract1->insertAfter(extract0);
+				extract2->insertAfter(extract1);
+				eCmp->insertAfter(extract2);
+				eSel[i]->insertAfter(eCmp);
+			}
+
+			//we use the results of the SelectInst's to populate the final return value
+			// which we will just use the existing first copy of the struct
+			for (int i = 0; i < nTypes; i+=1) {
+				//only sync if these are non-pointer values
+				if (eSel[i] == nullptr) {
+					continue;
+				}
+				//insert the select values into the first copy of the struct
+				arr[0] = i;
+				auto insertIdx = ArrayRef<unsigned>(arr);
+				std::string insertName = "voter.insert." + std::to_string(i);
+				auto insVal = InsertValueInst::Create(op0, eSel[i], insertIdx, insertName);
+				insVal->insertBefore(currTerminator);
+//				errs() << *insVal << "\n";
+			}
+			//don't even have to change the Terminator!
+			//this part is so different from the other kinds that we skip all the rest of the stuff below
+			//TODO: what's up the with syncInsts list?
+			return;
+
+		} else if (opType->isAggregateType()) {
+			errs() << "It's an aggregate type!\n";
+		} else {
+			errs() << "Unidentified type!\n";
+			errs() << *currTerminator << "\n";
+//			errs() << *opType << "\n";
+//			if (opType->isPointerTy())
+//				errs() << "Pointer type!\n";
+//			for (auto x = opType->subtype_begin(); x != opType->subtype_end(); x++) {
+//				errs() << **x << "\n";
+//			}
+			assert(false && "Return type not supported!\n");
 		}
+		if (!cmp_op) {
+			errs() << err_string << " " << *opType << "\n";
+			errs() << *currTerminator << "\n";
+		}
+		assert(cmp_op && "return type not supported!");
+
 		Instruction* cmp = CmpInst::Create(cmp_op, cmp_eq, op, clone1,
 			"cmp", currTerminator);
 
@@ -512,11 +668,11 @@ void dataflowProtection::syncTerminator(TerminatorInst* currTerminator, GlobalVa
 		syncInsts.push_back(cmp);
 		syncInsts.push_back(sel);
 
-		// Too many cases to account for each possiblity, this is removed
+		// Too many cases to account for each possibility, this is removed
 		// assert(numUses == 2 && "Instruction only used in terminator synchronization");
 		insertTMRCorrectionCount(cmp,TMRErrorDetected);
-	} else{
-		if (!isCloned(currTerminator->getOperand(0))){
+	} else {		//DWC
+		if (!isCloned(currTerminator->getOperand(0))) {
 			return;
 		}
 
@@ -525,12 +681,150 @@ void dataflowProtection::syncTerminator(TerminatorInst* currTerminator, GlobalVa
 
 		Instruction::OtherOps cmp_op;
 		CmpInst::Predicate cmp_eq;
-		if (currTerminator->getOperand(0)->getType()->isFPOrFPVectorTy()) {
+		auto opType = currTerminator->getOperand(0)->getType();
+
+		//see comments in TMR section about synchronizing on pointer values
+		if (opType->isPointerTy()) {
+			if (verboseFlag) {
+				errs() << warn_string << " skipping synchronizing on return instruction of pointer type:\n";
+				errs() << " in " << currTerminator->getParent()->getName() << "\n";
+			}
+			return;
+		}
+
+		if (opType->isFPOrFPVectorTy()) {
 			cmp_op = Instruction::OtherOps::FCmp;
 			cmp_eq = CmpInst::FCMP_UEQ; //Should this be OEQ instead?
-		} else {
+		} else if (opType->isIntOrIntVectorTy()) {
 			cmp_op = Instruction::OtherOps::ICmp;
 			cmp_eq = CmpInst::ICMP_EQ;
+		} else if (opType->isStructTy()) {
+			//get the size of the struct
+			StructType* sType = dyn_cast<StructType>(opType);
+			uint64_t nTypes = sType->getStructNumElements();
+			//load each of the inner values and get their types
+			Value* op0 = currTerminator->getOperand(0);
+			Value* op1 = cloneMap[op0].first;
+
+			//we'll need these later
+			unsigned arr[] = {0};
+//			CmpInst* eCmp[nTypes];
+			std::vector<CmpInst*> eCmp;
+			int firstTime = 1;
+			Instruction* syncPointLater;
+
+			for (int i = 0; i < nTypes; i+=1) {
+				//type to compare
+				auto eType = sType->getStructElementType(i);
+
+				//index to extract
+				arr[0] = i;
+				auto extractIdx = ArrayRef<unsigned>(arr);
+
+				//names of instructions
+				std::string extractName    = "getToCompare." + std::to_string(i);
+				std::string extractNameDWC = extractName + ".DWC";
+				std::string cmpName = "cmpElement." + std::to_string(i);
+
+				//create the ExtractValueInst's
+				ExtractValueInst* extract0 = ExtractValueInst::Create(op0, extractIdx, extractName);
+				ExtractValueInst* extract1 = ExtractValueInst::Create(op1, extractIdx, extractNameDWC);
+
+				//create the compare instructions
+				if (eType->isFPOrFPVectorTy()) {
+					cmp_op = Instruction::OtherOps::FCmp;
+					cmp_eq = CmpInst::FCMP_UNE;
+				} else if (eType->isIntOrIntVectorTy()) {
+					cmp_op = Instruction::OtherOps::ICmp;
+					cmp_eq = CmpInst::ICMP_NE;
+					//compare not equal - returns true (1) if not equal, so expect all to be false (0)
+				} else if (eType->isPointerTy()) {
+					//we'll have to skip syncing on this value
+					//do the extract instructions just disappear if we don't insert them anywhere?
+					//nope!
+					extract0->deleteValue();
+					extract1->deleteValue();
+					continue;
+				} else {
+					errs() << "eType: " << *eType << "\n";
+					assert(cmp_op && "valid comparison type assigned");
+				}
+
+				//only set the logic point if it's still valid
+				if (firstTime) {
+					firstTime = 0;
+					syncPointLater = extract0;
+				}
+//				eCmp[i] = CmpInst::Create(cmp_op, cmp_eq, extract0, extract1, cmpName);
+				eCmp.push_back(CmpInst::Create(cmp_op, cmp_eq, extract0, extract1, cmpName));
+
+				//debug
+//				errs() << *extract0 << "\n" << *extract1 << "\n" << *eCmp[i] << "\n";
+
+				//insert the instructions into the basic block
+				extract0->insertBefore(currTerminator);
+				extract1->insertAfter(extract0);
+				eCmp.back()->insertAfter(extract1);
+			}
+
+			//this doesn't help with the below anymore, but still a good check
+			assert(nTypes > 1);
+
+			Instruction* cmpInst;
+			cmp_op = Instruction::OtherOps::ICmp;
+			cmp_eq = CmpInst::ICMP_EQ;
+
+			if (eCmp.size() > 2) {
+				//final reduce & compare
+				//use OR because if any one of them is 1, it will get set to 1 and stay that way
+				//there will be at least 2, so OR them together first
+				BinaryOperator* acc;
+				int i = 0;
+				do {
+					std::string reduceName = "reduce." + std::to_string(i);
+					acc = BinaryOperator::Create(Instruction::BinaryOps::Or, eCmp.at(i), eCmp.at(i+1),
+							reduceName, currTerminator);
+					i+=1;
+//					errs() << *acc << "\n";
+				} while (i < eCmp.size()-1);
+				//compare against 0
+				ConstantInt* compareAgainst =
+						ConstantInt::get(dyn_cast<IntegerType>(acc->getType()), 0, false);
+				cmpInst = CmpInst::Create(cmp_op, cmp_eq, acc, compareAgainst);
+				cmpInst->insertBefore(currTerminator);
+//				errs() << *cmpInst << "\n";		errs() << *cmpInst->getParent() << "\n";
+			} else if (eCmp.size() == 1) {
+				//only one element - then just compare the
+				ConstantInt* compareAgainst =
+						ConstantInt::get(dyn_cast<IntegerType>(eCmp.at(0)->getType()), 0, false);
+				cmpInst = CmpInst::Create(cmp_op, cmp_eq, eCmp.at(0), compareAgainst);
+				cmpInst->insertBefore(currTerminator);
+			} else {
+				//nothing compared because they're all pointers
+				//so there's no synchronization necessary (?)
+				syncPoints.push_back(currTerminator);
+				return;
+			}
+
+			//split the block
+			Function* currFn = currTerminator->getParent()->getParent();
+			Instruction* lookAtLater = cmpInst->getPrevNode();
+			assert(lookAtLater);
+			splitBlocks(cmpInst, errBlockMap[currFn]);
+			/*
+			 * things that get invalidated:
+			 *   the new terminator of the split block is not in syncpoint list
+			 *   any special information about synclogic
+			 */
+			Instruction* newTerm = lookAtLater->getParent()->getTerminator();
+			syncPoints.push_back(newTerm);
+			startOfSyncLogic[newTerm] = syncPointLater;
+			return;
+
+		} else {
+			errs() << "Unidentified type!\n";
+			errs() << *currTerminator << "\n";
+			assert(false && "Return type not supported!\n");
 		}
 
 		Instruction *cmpInst = CmpInst::Create(cmp_op,cmp_eq, currTerminator->getOperand(0),
@@ -742,6 +1036,13 @@ void dataflowProtection::insertTMRCorrectionCount(Instruction* cmpInst, GlobalVa
 	}
 	Instruction* cmpInst2 = CmpInst::Create(cmp_op, cmp_eq, orig, clone2, "cmp",nextInst);
 	BinaryOperator* andCmps = BinaryOperator::CreateAnd(cmpInst,cmpInst2,"cmpReduction",nextInst);
+
+	if (!andCmps->getType()->isIntegerTy(1)) {
+		errs() << "TMR detector can't branch on " << *(andCmps->getType()) << ".  Disable vectorization? (-fno-vectorize) \n";
+		errs() << *andCmps << "\n";
+		errs() << *andCmps->getParent() << "\n";
+		assert(false);
+	}
 
 	BasicBlock* originalBlock = cmpInst->getParent();
 	BasicBlock* errBlock = BasicBlock::Create(originalBlock->getContext(),

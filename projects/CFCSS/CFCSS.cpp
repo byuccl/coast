@@ -755,8 +755,12 @@ bool CFCSS::runOnModule(Module &M) {
 
 			//find the basic block of the name of the one being called
 			Function* calledF = callI->getCalledFunction();
-			assert(calledF && "Called function is valid");
-			if(!calledF->isDeclaration() && !shouldSkipF(calledF->getName())){
+			if(calledF == nullptr) {
+				//TODO: add support for functions which are couched inside of bitcasts
+				continue;
+			}
+//			assert(calledF && "Called function is valid");
+			else if (!calledF->isDeclaration() && !shouldSkipF(calledF->getName())){
 				updateCallInsts(callI, bn, IT1, RTS, RTSA);
 				callInstList.push_back(callI);
 				callCount[calledF->getName()] += 1;

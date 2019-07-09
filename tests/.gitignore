@@ -1,0 +1,12 @@
+*.ll
+*.bc
+*.o
+*.elf
+*.map
+*.s
+build
+*.obj
+*.d_raw
+*.log
+a.out
+*.out
