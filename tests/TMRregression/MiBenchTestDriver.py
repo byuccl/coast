@@ -269,7 +269,7 @@ def printIntro(logFileName, numConfigurations, verboseFlag):
     if verboseFlag:
         print("**Verbose mode enabled**")
     print("-----------------------------------------------------")
-    print("Tests beginning...", end="\r")
+    print("Tests beginning...", end='\r')
 
 def updateConsoleDisplay(srcFolder, totalRuns, testNum):
     print("Testing in: " + srcFolder)
@@ -284,7 +284,7 @@ def main():
     args = parser.parse_args()
     verboseFlag = args.verbose
 
-    progFolder = os.path.expanduser("~/llvm/tests/TMRregression/")
+    progFolder = os.path.expanduser("~/coast/tests/TMRregression/")
     # the output checker is a separate functionality
     # it will only run that, then exit
     if args.check:
@@ -298,12 +298,12 @@ def main():
     # it is a lot of work to figure out how to extract all of the following data
     #   automatically; it is actually less time consuming to just pull it all
     #   out by hand
-    folder_list = ["~/llvm/tests/MiBench/automotive/basicmath/",
-                    "~/llvm/tests/MiBench/automotive/bitcount/",
-                    "~/llvm/tests/MiBench/automotive/qsort/",
-                    "~/llvm/tests/MiBench/automotive/susan/",
-                    "~/llvm/tests/MiBench/network/dijkstra/",
-                    "~/llvm/tests/MiBench/network/patricia/"]
+    folder_list = ["~/coast/tests/MiBench/automotive/basicmath/",
+                    "~/coast/tests/MiBench/automotive/bitcount/",
+                    "~/coast/tests/MiBench/automotive/qsort/",
+                    "~/coast/tests/MiBench/automotive/susan/",
+                    "~/coast/tests/MiBench/network/dijkstra/",
+                    "~/coast/tests/MiBench/network/patricia/"]
     target_list = [
             ['basicmath_small',
              'basicmath_large'],

@@ -13,7 +13,6 @@ Prerequisites
 ================
 
 - Have a version of Linux that has ``cmake`` and ``make`` installed.
-- Make sure ``git`` is installed and clone this repository.
 
 For reference, development of this tool has been done on Ubuntu 16.04.
 
@@ -30,7 +29,7 @@ Building LLVM
 
  ``cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=On ../llvm/``
 
- See the README in the "build" folder for more information.
+ See the ``README.md`` in the "build" folder for more information on how to further configure LLVM.
 
 - Run ``make``.  This may take quite a while, up to an hour or more if you do not parallelize the job.  Adding the flag ``-jn`` allows you to parallelize across ``n`` cores.
 

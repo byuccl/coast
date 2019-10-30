@@ -4,6 +4,13 @@
 #include "COAST.h"
 __DEFAULT_NO_xMR
 
+#define SIMULATED
+#ifdef SIMULATED
+#define N 2
+#else
+#define N 100
+#endif
+
 #include "platform.h"
 
 #define US_PER_S (1000 * 1000)
@@ -22,7 +29,7 @@ int main() {
     while (1) {
        	uint64_t t1 = get_timer_value();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < N; i++) {
 			sha_run_test();
 			error = checkGolden();
 			if (error)

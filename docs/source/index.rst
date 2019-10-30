@@ -18,6 +18,7 @@ COAST
     passes
     troubleshooting
     cfcss
+    release_notes
 
 Folder guide
 ==============

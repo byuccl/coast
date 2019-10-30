@@ -8,26 +8,29 @@
 #define ARRAY_SIZE  4
 #define ELEMENT_SIZE    10
 
-typedef struct{
+typedef struct {
     float a;
     float b;
 } inner_struct;
 
-typedef struct{
+typedef struct {
     int x;
     int y;
     int array[ARRAY_SIZE];
     inner_struct z;
-}outer_struct;
+} outer_struct;
 
-outer_struct* __attribute__((annotate("xMR_call"))) alloc_struct(){
+outer_struct* __attribute__((annotate("xMR_call"))) alloc_struct() {
     outer_struct* st = (outer_struct*) malloc(sizeof(outer_struct));
     return st;
 }
 
-int main(){
+int main() {
     //don't even need to do anything with the struct, just create it and destroy it
     outer_struct* st = alloc_struct();
     free(st);
     printf("Finished\n");
+    //this unit test considered to have succeeded
+    // if there are no memory leaks (double free corruption, etc)
+    return 0;
 }

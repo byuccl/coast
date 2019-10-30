@@ -15,6 +15,7 @@ cl::opt<bool> noMemReplicationFlag ("noMemReplication", cl::desc("Do not duplica
 cl::opt<bool> noLoadSyncFlag ("noLoadSync", cl::desc("Do not synchronize on data loads"));
 cl::opt<bool> noStoreDataSyncFlag ("noStoreDataSync", cl::desc("Do not synchronize data on data stores"));
 cl::opt<bool> noStoreAddrSyncFlag ("noStoreAddrSync", cl::desc("Do not synchronize address on data stores"));
+cl::opt<bool> storeDataSyncFlag ("storeDataSync", cl::desc("Force synchronize data on data stores (not default)"));
 
 //Replication scope
 //note: any changes to list names must also be changed at the top of utils.cpp
@@ -32,6 +33,7 @@ cl::opt<bool> SegmentFlag ("s", cl::desc("Segment instructions, rather than inte
 cl::list<std::string> globalsToRuntimeInitCl("runtimeInitGlobals", cl::CommaSeparated, cl::ZeroOrMore);
 cl::opt<bool> dumpModuleFlag ("dumpModule", cl::desc("Print out the module immediately before pass concludes. Option is for pass debugging."));
 cl::opt<bool> verboseFlag ("verbose", cl::desc("Increase the amount of output"));
+cl::opt<bool> noMainFlag ("noMain", cl::desc("There is no 'main' function in this module"));
 
 //--------------------------------------------------------------------------//
 // Top level behavior
@@ -67,12 +69,18 @@ bool dataflowProtection::run(Module &M, int numClones) {
 	// First figure out which instructions are going to be cloned
 	populateValuesToClone(M);
 
+	// validate that the configuration parameters can be followed safely
+	verifyOptions(M);
+
 	// Now add new arguments to functions
 	// (In LLVM you can't change a function signature, so we have to make new functions)
 	// populateValuesToClone has to be called before this so we know which
 	// instructions are cloned, and thus when functions need to have extra arguments
 	cloneFunctionArguments(M);
 	removeOrigFunctions();
+
+	// deal with function wrappers
+	updateFnWrappers(M);
 
 	// Once again figure out which instructions are going to be cloned
 	// This need to be re-run after creating the new functions as the old
@@ -86,6 +94,7 @@ bool dataflowProtection::run(Module &M, int numClones) {
 
 	// Change clones to depend on the duplications
 	updateCallInsns(M);
+	updateInvokeInsns(M);
 
 	//Insert error detection/handling
 	insertErrorFunction(M, numClones);
@@ -107,6 +116,8 @@ bool dataflowProtection::run(Module &M, int numClones) {
 
 	// This is executed if code is segmented instead of interleaved
 	moveClonesToEndIfSegmented(M);
+
+//	removeUnusedFunctions(M);
 
 	//Option executed when -dumpModule is passed in
 	dumpModule(M);

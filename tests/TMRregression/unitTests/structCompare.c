@@ -27,13 +27,16 @@ int structCompare(testStruct_t d0, testStruct_t d1) {
 }
 
 int main() {
+    int returnVal = 0;
+
     testStruct_t d0 = {1, 2};
     testStruct_t d1 = newStruct();
     if (structCompare(d0, d1)) {
         printf("Equal!\n");
     } else {
         printf("Not equal!\n");
+        returnVal = -1;
     }
 
-    return 0;
+    return returnVal;
 }

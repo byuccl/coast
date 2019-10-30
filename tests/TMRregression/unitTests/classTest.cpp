@@ -33,5 +33,9 @@ int main() {
     int x = mc.getStuff();
     std::cout << "stuff = " << x << "\n";
 
-    return 0;
+    //expected: 0
+    if (x) {
+        printf("Error!\n");
+    }
+    return x;
 }

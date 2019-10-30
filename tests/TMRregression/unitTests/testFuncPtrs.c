@@ -13,22 +13,32 @@ int sub(int i, int j)
    return (i - j);
 }
 
-void print(int x, int y, int (*func)())
+int print(int x, int y, int (*func)())
 {
-        printf("value is : %d\n", (*func)(x, y));
+    int val = (*func)(x, y);
+    printf("value is : %d\n", val);
+    //check values
+    if ( (val == 300) || (val == -100) ) {
+        return 0;
+    } else {
+        return val;
+    }
 }
 
 int main()
 {
-    // test with calling function pointers
+    int returnVal = 0;
     int x=100, y=200;
-    print(x,y,add);     // expected output: 300
-    print(x,y,sub);     // expected output: -100
+
+    // test with calling function pointers
+    returnVal |= print(x, y, add);     // expected output: 300
+    returnVal |= print(x, y, sub);     // expected output: -100
 
     // see if we can create arrays of function pointers
     int (* pBitCntFunc[2])(int, int) = {
-      add, sub
+        add,
+        sub
     };
 
-    return 0;
+    return returnVal;
 }

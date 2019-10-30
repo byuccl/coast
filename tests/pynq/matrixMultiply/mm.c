@@ -16,13 +16,14 @@ __DEFAULT_NO_xMR
 
 #define SIMULATED
 #ifdef SIMULATED
-#define N 2
+#define N 5
 #else
 #define N 1000
 #endif
 
-unsigned error;
+#define US_PER_S (1000 * 1000)
 
+unsigned error;
 typedef uint32_t mm_t;
 
 #include "mm.inc"
@@ -48,8 +49,8 @@ int main()
 		}
 		XTime_GetTime(&tEnd);
 
-		float t = ((float) (tEnd - tStart)) / COUNTS_PER_SECOND;
-		printf("C:%d E:%d F:0 T:%fs\n\r", CORE, error, t);
+		uint32_t t = US_PER_S *((float) (tEnd - tStart)) / COUNTS_PER_SECOND;
+		printf("C:%d E:%d F:0 T:%uus\n\r", CORE, error, t);
 	}
     return 0;
 }

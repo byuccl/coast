@@ -12,7 +12,7 @@ CPP_SRCS	= $(wildcard $(PROJECT_SRC)/*.cpp)
 BCFILES		= $(patsubst %.c,%.clang.bc,$(notdir $(C_SRCS)))
 BCPPFILES	= $(patsubst %.cpp,%.clang.bcpp,$(notdir $(CPP_SRCS)))
 
-CLANG_FLAGS := -fcolor-diagnostics
+CLANG_FLAGS := -fcolor-diagnostics $(USER_CFLAGS)
 XLFLAGS 	?= -lm
 INCS		:=-I$(LEVEL)
 
@@ -51,7 +51,7 @@ $(TARGET).lbc: $(BCFILES) $(BCPPFILES)
 
 ################# CLANG #################
 # Lowest level target should depend on the Makefiles
-%.clang.bc: %.c $(MAKEFILES)
+%.clang.bc: %.c
 	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
 	@echo '  'flags = $(CLANG_FLAGS)
 	@$(CLANG) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@

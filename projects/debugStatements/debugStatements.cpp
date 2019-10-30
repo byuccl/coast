@@ -17,6 +17,10 @@
 
 using namespace llvm;
 
+// list of functions to add print statements to
+// if nothing, do all
+cl::list<std::string> fnPrintList("fnPrintList", cl::desc("Specify functions to instrument. Defaults to all."), cl::CommaSeparated, cl::ZeroOrMore);
+
 
 //--------------------------------------------------------------------------//
 // Top level behavior
@@ -52,10 +56,18 @@ bool DebugStatements::runOnModule(Module &M) {
 	StringRef arrow = StringRef("-->");
 	StringRef newLineChar = StringRef("\n");
 
+	bool specificFlag = (fnPrintList.size() > 0);
 
 	for (auto &F : M) {
-		if(F.getBasicBlockList().size()  == 0)
+		if (F.getBasicBlockList().size()  == 0)
 			continue;
+
+		// if there's something in the list, and this function isn't, continue
+		if (specificFlag && (std::find(fnPrintList.begin(), fnPrintList.end(), F.getName().str()) == fnPrintList.end()) ) {
+			continue;
+		}
+//		errs() << F.getName() << "\n";
+
 		BasicBlock* entryBlock = &F.getEntryBlock();
 
 		//Variable def'ns

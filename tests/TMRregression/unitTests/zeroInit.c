@@ -31,5 +31,10 @@ int main() {
 	printf("Calculated: %d, %d\n", acc1, acc2);
 	printf("  Expected: %d, %d\n", 4240, 4220);
 
-	return 0;
+	//check
+	if ( (acc1 == 4240) && (acc2 == 4220) ) {
+		return 0;
+	} else {
+		return -1;
+	}
 }

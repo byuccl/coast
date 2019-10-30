@@ -1,5 +1,7 @@
 *.ll
 *.bc
+*.lbc
+*.bcpp
 *.o
 *.elf
 *.map

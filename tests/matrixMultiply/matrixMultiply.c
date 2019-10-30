@@ -112,12 +112,12 @@ void matrix_multiply(int f_matrix[][side], int s_matrix[][side], unsigned r_matr
 }
 
 __attribute__((noinline))
-int checkGolden() {
+int checkGolden() __NO_xMR {
 	int __xMR num_of_errors = 0;
 	int i = 0;
 	int j = 0;
 
-	for(i=0; i<side; i++) {
+	for(i = 0; i < side; i++) {
 		for (j = 0; j < side; j++) {
 			if (golden[i][j] != results_matrix[i][j]) {
 				num_of_errors++;

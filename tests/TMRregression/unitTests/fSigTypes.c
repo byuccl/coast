@@ -27,13 +27,28 @@ int main() {
     inc(b);
     c = add(a, b);
     print(c);
+    //check
+    if (c != 3) {
+        printf("Error!\n");
+        return -1;
+    }
 
     incx();
     d = test();
     print(d);
+    //check
+    if (d != 1) {
+        printf("Error!\n");
+        return -1;
+    }
 
     e = (float)add(b, c);
     printf("value is : %f\n", e);
+    //check
+    if (e != 5.0) {
+        printf("Error!\n");
+        return -1;
+    }
 
     return 0;
 }

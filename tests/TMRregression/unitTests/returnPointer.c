@@ -23,5 +23,14 @@ int main() {
 
     printf("x = %d\n", x);
 
+    //expected results: x == 1
+    if (x == 1) {
+        printf("Success!\n");
+        return 0;
+    } else {
+        printf("Error!\n");
+        return -1;
+    }
+
     return 0;
 }

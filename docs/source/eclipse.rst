@@ -25,3 +25,27 @@ Building the projects
 2. Call the target name ``all`` and click OK.
 3. To build your pass, right click on the build folder and click "Make Targets -> Build -> Build" (with the target ``all`` selected).
 4. After the first time that you’ve done this, you can rebuild all your passes by pressing ``F9``.
+
+
+Fixing the CDT settings
+========================
+
+The default settings of the project are not sufficient to allow the Eclipse CDT indexer to work correctly.  While not necessary to fix the CDT settings, it allows you to use the auotcomplete functionality of Eclipse.
+
+1. Right-click on the project and select "Properties"
+#. Under "C/C++ General" select "Paths and Symbols"
+#. Add a new Include Directory using the "Add" button
+#. Select "File System"
+#. Navigate to the repository root, then select ``llvm/include``
+#. Check the box "Add to all languages," then click "OK"
+#. On the left pane, select "Preprocessor Include Paths, Macros, etc"
+#. On the "Providers" select "CDT GCC Built-in Compiler Settings"
+#. Edit the "Command to get compiler specs" by putting ``std=c++11`` right before ``${INPUTS}``
+#. Move the entry "CDT GCC Built-in Compiler Settings" to the top of the list using the "Move Up" button
+#. Select "Apply and Close"
+
+1. Select "Window" -> "Preferences"
+#. Select "C/C++" -> "Build" -> "Settings"
+#. Under the "Discovery" tab select "CDT GCC Built-in Compiler Settings"
+#. Edit the "Command to get compiler specs" the same as before
+#. Select "Apply and Close"

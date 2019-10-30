@@ -24,7 +24,7 @@ CPPFLAGS := -stdlib=libc++ -I/usr/include/c++/5.4.0/ -I/usr/include/x86_64-linux
 # CPPSTD - C++ standard to use when compiling files, default is c++11
 ###########################################################
 
-LLVMROOT = $(HOME)/llvm
+LLVMROOT = $(HOME)/coast
 CLANG = $(LLVMROOT)/build/bin/clang
 CLANG++ = $(LLVMROOT)/build/bin/clang++
 LLVMDIS = $(LLVMROOT)/build/bin/llvm-dis
@@ -97,10 +97,13 @@ $(TARGET).clang.bc: $(BCFILES) $(BCPPFILES)
 %.bcpp: $(SRCFOLDER)/%.cpp
 	$(CLANG++) -std=$(CPPSTD) -emit-llvm $(CPPFLAGS) $< -c -o $@
 
-.PHONY: clean
+.PHONY: clean small_clean
 
-clean:
-	@rm -f *.bc *.bcpp *.s *.ll $(TARGET)
+small_clean:
+	@rm -f *.bc *.bcpp *.s $(TARGET)
+
+clean: small_clean
+	@rm -f *.ll
 
 cfg: $(TARGET).opt.ll $(TARGET).clang.ll
 	@rm -rf cfg

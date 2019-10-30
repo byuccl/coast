@@ -28,14 +28,14 @@ $(TARGET).lbc: $(BCFILES) $(BCPPFILES)
 
 ################# CLANG #################
 # Lowest level target should depend on the Makefiles
-%.clang.bc: %.c $(MAKEFILES)
+%.clang.bc: %.c
 	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
 	@echo '  'flags = $(CLANG_FLAGS)
 	@$(CLANG) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
 
 ################ CLANG++ ################
 # Lowest level target should depend on the Makefiles
-%.clang.bcpp: %.cpp $(MAKEFILES)
+%.clang.bcpp: %.cpp
 	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
 	@echo '  'flags = $(CLANG_FLAGS)
 	$(CLANG++) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@

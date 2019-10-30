@@ -11,8 +11,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
 
-//trying to fix the issue with instructions not segmenting correctly
-#define SYNC_POINT_FIX
+#define FIX_STORE_SEGMENTING
 
 using namespace llvm;
 
@@ -38,9 +37,11 @@ private:
   const std::string no_xMR_anno    = "no_xMR";
   const std::string xMR_anno       = "xMR";
   const std::string xMR_call_anno  = "xMR_call";
+  const std::string skip_call_anno = "coast_call_once";
   const std::string default_xMR    = "set_xMR_default";
   const std::string default_no_xMR = "set_no_xMR_default";
   const std::string default_global = "__xMR_DEFAULT_BEHAVIOR__";
+  const std::string coast_volatile = "coast_volatile";
 
   //----------------------------------------------------------------------------//
   // Constant strings for fancy printing
@@ -61,12 +62,18 @@ private:
   std::set<Instruction*> instsToSkip;
   std::set<GlobalVariable*> globalsToClone;
   std::set<GlobalVariable*> globalsToSkip;
+  std::set<GlobalVariable*> volatileGlobals;
+  std::set<Function*> usedFunctions; 	/* marked with __attribute__((used)) */
   std::set<GlobalVariable*> globalsToRuntimeInit;
   std::set<ConstantExpr*> constantExprToClone;
   std::set<Function*> fnsUsedIndirectly;
   std::set<Type*> indirectFnSignatures;
 
+  std::set<Instruction*> instsToCloneAnno;
+  std::set<Instruction*> wrapperInsts;
+
   std::vector<Instruction*> syncPoints;
+  std::vector<Instruction*> newSyncPoints;		//added while processing old ones
   std::map<Value*,ValuePair> cloneMap;
   std::map<Function*, BasicBlock*> errBlockMap;
   std::map<Function*, Function*> functionMap;
@@ -95,6 +102,7 @@ private:
   void populateFnWorklist(Module& M);
   void cloneFunctionArguments(Module& M);
   void updateCallInsns(Module& M);
+  void updateInvokeInsns(Module& M);
   // Clone instructions
   bool cloneInsns();
   // Clone constants
@@ -111,7 +119,7 @@ private:
   void populateSyncPoints(Module& M);
   // Insert synchronization logic
   void processSyncPoints(Module& M, int numClones);
-  void syncGEP(GetElementPtrInst* currGEP, GlobalVariable* TMRErrorDetected);
+  bool syncGEP(GetElementPtrInst* currGEP, GlobalVariable* TMRErrorDetected);
   void syncStoreInst(StoreInst* currStoreInst, GlobalVariable* TMRErrorDetected);
   void processCallSync(CallInst* currCallInst, GlobalVariable* TMRErrorDetected);
   void syncTerminator(TerminatorInst* currTerminator, GlobalVariable* TMRErrorDetected);
@@ -120,8 +128,9 @@ private:
   void insertErrorFunction(Module& M, int numClones);
   void createErrorBlocks(Module& M, int numClones);
   // TMR error detection
-  void insertTMRCorrectionCount(Instruction* cmpInst, GlobalVariable* TMRErrorDetected);
+  void insertTMRCorrectionCount(Instruction* cmpInst, GlobalVariable* TMRErrorDetected, bool updateSyncPoint = false);
   void insertTMRDetectionFlag(Instruction* cmpInst, GlobalVariable* TMRErrorDetected);
+  void insertVectorTMRCorrectionCount(Instruction* cmpInst, Instruction* cmpInst2, GlobalVariable* TMRErrorDetected);
 
   //----------------------------------------------------------------------------//
   // utils.cpp
@@ -130,6 +139,7 @@ private:
   void removeUnusedFunctions(Module& M);
   void processCommandLine(Module& M, int numClones);
   void processAnnotations(Module& M);
+  void verifyOptions(Module& M);
   // Cleanup
   void removeAnnotations(Module& M);
   void removeOrigFunctions();
@@ -146,14 +156,22 @@ private:
   int getArrayTypeElementBitWidth(Module& M, ArrayType * arrayType);
   void recursivelyVisitCalls(Module& M, Function* F, std::set<Function*> &functionList);
   bool isISR(Function& F);
+  void walkInstructionUses(Instruction* I, bool xMR);
   void cloneMetadata(Module& M, Function* Fnew);
   // Synchronization utilities
   bool isSyncPoint(Instruction* I);
+#ifdef FIX_STORE_SEGMENTING
+  bool isStoreMovePoint(StoreInst* SI);
+#endif
+  bool isCallMovePoint(CallInst* ci);
+  bool checkCoarseSync(StoreInst* inst);
   // Miscellaneous
   bool isIndirectFunctionCall(CallInst* CI, std::string errMsg, bool print=true);
+  std::string getRandomString(std::size_t len);
   int getFunctionsFromConfig();
   void getFunctionsFromCL();
   void dumpModule(Module& M);
+  void updateFnWrappers(Module& M);
 
 };
 

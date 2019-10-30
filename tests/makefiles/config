@@ -12,6 +12,6 @@ BOARD ?= $(BOARD_LLI)
 export COAST_ROOT = $(LEVEL)/..
 
 VIVADO = /opt/Xilinx/Vivado/2018.2
-CCS_ROOT = /opt/ti/ccsv8/ccs_base
+CCS_ROOT = /opt/ti/ccs910/ccs/ccs_base
 export XILINX_SDK = /opt/Xilinx/SDK/2018.2
 FREEDOM_SDK=$(HOME)/freedom_sdk

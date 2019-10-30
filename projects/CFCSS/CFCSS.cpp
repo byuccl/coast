@@ -207,7 +207,7 @@ void CFCSS::BubbleSort(){
 			if((graph[j]->num) > (graph[j+1]->num)){
 				CFCSS::BBNode* b = graph[j];
 				graph[j] = graph[j+1];
-				graph[j] = b;
+				graph[j+1] = b;
 			}
 		}
 	}
@@ -760,7 +760,7 @@ bool CFCSS::runOnModule(Module &M) {
 				continue;
 			}
 //			assert(calledF && "Called function is valid");
-			else if (!calledF->isDeclaration() && !shouldSkipF(calledF->getName())){
+			else if (!calledF->isDeclaration() && !shouldSkipF(calledF->getName()) && !skipFnCl(calledF)){
 				updateCallInsts(callI, bn, IT1, RTS, RTSA);
 				callInstList.push_back(callI);
 				callCount[calledF->getName()] += 1;

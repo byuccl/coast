@@ -4,7 +4,7 @@ error:
 	@echo "Please choose a target"
 	@exit 2
 
-MAKEFILES := Makefile $(shell find $(LEVEL)/makefiles)
+MAKEFILES := $(notdir Makefile $(shell find $(LEVEL)/makefiles/) )
 
 include $(LEVEL)/makefiles/config
 include $(LEVEL)/makefiles/colors

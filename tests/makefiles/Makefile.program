@@ -62,7 +62,7 @@ else ifeq ($(BOARD), $(BOARD_TMS1224))
 	@rm -rf $(TMP_WORKSPACE)
 
 else ifeq ($(BOARD), $(BOARD_TMS4357))
-	@$(DEBUGSERVER_ROOT)/../../eclipse/ccstudio $(DSS_OPTIONS) "$(FILE_PATH) ./Debug/$(TARGET).out $(PROJ_DIR)/targetConfigs/TMS570LC43xx.ccxml"
+	@$(DEBUGSERVER_ROOT)/../../eclipse/ccstudio $(DSS_OPTIONS) "$(FILE_PATH) ./build/$(TARGET).out $(PROJ_DIR)/targetConfigs/TMS570LC43xx.ccxml"
 	@rm -rf $(TMP_WORKSPACE)
 
 else

@@ -46,4 +46,5 @@ int main() {
     printf("Using clock: %ld clicks to run (%f seconds)\n", dur, ((float)dur)/CLOCKS_PER_SEC);
 
     return 0;
+    //is there a good way to make this unit test self-checking?
 }

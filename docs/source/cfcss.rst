@@ -110,6 +110,12 @@ To implement the control flow checking, we inserted a set of instructions at the
 One of the optimizations we used was to only insert the extra XOR operation when :math:`D_n−1` was :math:`\neq 0`. This is one reason why the buffer block fix worked.
 
 
+Notes
+=============
+
+This pass was created for the purposes of studying LLVM IR and the LLVM C++ framework.  It is not actively being maintained.
+
+
 .. rubric:: Footnotes
 
 .. [#f1] N. Oh, P. P. Shirvani, and E. J. McCluskey, "Control-flow checking by software signatures," *IEEE Transactions on Reliability*\ , vol. 51, no. 1, pp. 111–122, Mar. 2002.

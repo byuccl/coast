@@ -2,7 +2,9 @@
 # Sources
 PROJECT_SRC := ${CURDIR} $(SRC_DIRS)
 CSRCS 		:= $(foreach dir,$(PROJECT_SRC),$(wildcard $(dir)/*.c))
-BUILD_DIR	:= ./build
+BUILD_DIR	?= ./build
+INC_DIRS	?=
+BC_FILES	:= $(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(CSRCS)))
 
 ################################################################################
 # dependencies
@@ -15,10 +17,19 @@ BSP_INC 	:= $(BSP_DIR)/include
 ################################################################################
 # Flags
 LIB_INCS	:= -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include/"  -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include-fixed/" -I"$(SDK_TRIPLE)/arm-none-eabi/include/" -I"$(SDK_TRIPLE)/arm-none-eabi/libc/usr/include/"
-SRC_INCS	:= -nostdinc -I"$(BSP_INC)/" $(LIB_INCS)
+NEW_INCS	:= $(addprefix -I,$(INC_DIRS))
+SRC_INCS	:= -nostdinc -I"$(BSP_INC)/" $(LIB_INCS) $(NEW_INCS)
 LIB_DIR		?= $(BSP_DIR)
 LIBS		:= -lxil -lgcc -lc
 LIBS 		+= $(PROJ_LIBS)
+
+# NEON support
+ifneq ($(ARM_NEON),)
+FPU_NAME := neon
+LIB_INCS := -I"$(COAST_ROOT)/build/lib/clang/7.0.0/include/" -I"$(COAST_ROOT)/llvm/tools/clang/lib/Headers/" $(LIB_INCS)
+else
+FPU_NAME := vfpv3
+endif
 
 # tricky stuff to make a comma-separated list
 # https://stackoverflow.com/a/7531247
@@ -29,6 +40,12 @@ LIBS	:= $(subst $(space),$(comma),$(strip $(LIBS)))
 
 CFLAGS 		:= -Wall -std=c99 $(USER_CFLAGS)
 CLANG_FLAGS := -fcolor-diagnostics -target arm-none-eabi $(CFLAGS) -fshort-enums -nostdlib
+# apparently clang does not correctly set some macros, so we have to do it manually
+#  if we want to use NEON intrinsics
+ifneq ($(ARM_NEON),)
+CLANG_FLAGS += -mfloat-abi=softfp -mfpu=neon-fp-armv8 -D"__ARM_NEON"
+endif
+CLANG_FLAGS += $(addprefix -D,$(USER_DEFS))
 
 LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=arm -mcpu=cortex-a9 -mattr=+vfp3 -float-abi=hard
 
@@ -73,8 +90,8 @@ $(BUILD_DIR)/$(NEW_LINK_F): $(LNK_SCRIPT)
 ################################################################################
 # Link everything together                                          		   #
 ################################################################################
-LD_FLAGS	:= -fdiagnostics-color -fshort-enums -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -mhard-float -Wl,--build-id=none -specs=$(SPEC_SRC) -Wl,-T -Wl,$(BOARD_SW)/lscript.ld -Wl,-Map,$(BUILD_DIR)/$(TARGET).map
-LD_LIBS		:= -L$(BUILD_DIR) -L$(LIB_DIR) -Wl,--start-group,$(LIBS),--end-group
+LD_FLAGS	:= -fdiagnostics-color -fshort-enums -mcpu=cortex-a9 -mfpu=$(FPU_NAME) -mfloat-abi=hard -mhard-float -Wl,--build-id=none -specs=$(SPEC_SRC) -Wl,-T -Wl,$(BOARD_SW)/lscript.ld -Wl,-Map,$(BUILD_DIR)/$(TARGET).map
+LD_LIBS		:= -Wl,-L$(BUILD_DIR),-L$(LIB_DIR) -Wl,--start-group,$(LIBS),--end-group
 
 $(BUILD_DIR)/$(TARGET).elf: $(BSP_LIB) $(BUILD_DIR)/$(TARGET).o | $(BUILD_DIR)/$(NEW_LINK_F)
 	@echo -e $(COLOR_MAGENTA)linking with libraries $(NO_COLOR)
@@ -86,7 +103,7 @@ $(BUILD_DIR)/$(TARGET)_%.elf: $(BUILD_DIR)/$(TARGET)_%.o $(BSP_LIB) | $(BUILD_DI
 	@echo -e $(COLOR_MAGENTA)linking with libraries $(NO_COLOR)
 	@echo -e '  'flags = $(LD_FLAGS)
 	@echo -e '  'libs = $(LD_LIBS)
-	$(LD) -g -fdiagnostics-color -fshort-enums -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -mhard-float -Wl,--build-id=none -specs=$(SPEC_SRC) -Wl,-T -Wl,$(BOARD_SW)/lscript_$*.ld -Wl,-Map,$(BUILD_DIR)/$(TARGET).map $^ -o $@ -L$(BUILD_DIR) -L$(LIB_DIR) -Wl,--start-group,-lxil_$*,-lgcc,-lc,--end-group
+	$(LD) -g -fdiagnostics-color -fshort-enums -mcpu=cortex-a9 -mfpu=$(FPU_NAME) -mfloat-abi=hard -mhard-float -Wl,--build-id=none -specs=$(SPEC_SRC) -Wl,-T -Wl,$(BOARD_SW)/lscript_$*.ld -Wl,-Map,$(BUILD_DIR)/$(TARGET).map $^ -o $@ -L$(BUILD_DIR) -L$(LIB_DIR) -Wl,--start-group,-lxil_$*,-lgcc,-lc,--end-group
 
 ################################################################################
 # Create object file (machine code) from assembly  			                   #
@@ -142,7 +159,7 @@ $(BUILD_DIR)/$(TARGET)_%.opt.bc: $(BUILD_DIR)/$(TARGET)_%_linked.bc
 # Linking the modules together			                                       #
 ################################################################################
 
-$(BUILD_DIR)/$(TARGET)_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(CSRCS)))
+$(BUILD_DIR)/$(TARGET)_linked.bc: $(BC_FILES)
 	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
 	@$(LLVM_LINK) $^ -o $@
 
@@ -161,13 +178,21 @@ $(BUILD_DIR)/$(TARGET)_1_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc.1,$(notdir 
 
 # have to create a separate rule for each source directory
 #  but we can use a special construct to generate rules
+SUFFIXES	:= _linked.bc _linked.ll .s .opt.ll .opt.bc .o .map .elf
+EXE_FILES	:= $(addprefix $(TARGET),$(SUFFIXES))
+EXE_FILES	:= $(addprefix $(BUILD_DIR)/, $(EXE_FILES))
 
 define bc_file_compile =
 dir := $(1)
 
-$$(BUILD_DIR)/%.bc: $$(dir)/%.c $(MAKEFILES) $(INC_FILES) | $$(BUILD_DIR)/
+C_SRCS	 	:= $$(wildcard $$(dir)/*.c)
+C_SRC_NEW	:= $$(addprefix $$(BUILD_DIR)/,$$(notdir $$(C_SRCS)))
+EXE_FILES 	+= $$(patsubst %.c,%.bc, $$(C_SRC_NEW))
+EXE_FILES 	+= $$(patsubst %.c,%.ll, $$(C_SRC_NEW))
+
+$$(BUILD_DIR)/%.bc: $$(dir)/%.c $(INC_FILES) | $$(BUILD_DIR)/
 	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
-	$$(CLANG) -emit-llvm $$(CLANG_FLAGS) $$(SRC_INCS) $$< -c -o $$@
+	@$$(CLANG) -emit-llvm $$(CLANG_FLAGS) $$(SRC_INCS) $$< -c -o $$@
 
 $$(BUILD_DIR)/%.bc.0: $$(dir)/%.c $(MAKEFILES) $(INC_FILES) | $$(BUILD_DIR)/
 	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
@@ -181,43 +206,58 @@ endef
 
 $(foreach dir,$(PROJECT_SRC),$(eval $(call bc_file_compile,$(dir))))
 
+
 ################################################################################
 # Rules for building the BSP		                                           #
 ################################################################################
 
 .PHONY: bsp bsp_lib bsp_include
 
-BSP_DIRS	:= $(shell find ${BSP_DIR}/libsrc -type f -print)
+BSP_DIRS	:= $(shell find ${BSP_DIR}/ps7_cortexa9_0/libsrc/*/src/ -type d -print)
 # all the dirs with source files for compiling BSP
-BSP_SRCS	:= $(filter %/src/Makefile,$(BSP_DIRS))
-BSP_SRCS	:= $(filter %/Makefile,$(BSP_SRCS))
-BSP_SRCS 	:= $(dir $(BSP_SRCS))
+BSP_SRCS	:= $(filter %/src/,$(BSP_DIRS))
+BSP_FRTOS_SRC := $(filter %/freertos10_xilinx_v1_1/src/,$(BSP_SRCS))
+BSP_STALN_SRC := $(filter %/standalone_v6_7/src/,$(BSP_SRCS))
+
 # debug
 # BSP_SRCS 	:= $(word 1, $(BSP_SRCS))
-BSP_SFLAGS	:= "SHELL=/bin/sh" "COMPILER=arm-none-eabi-gcc" "ARCHIVER=arm-none-eabi-ar" "COMPILER_FLAGS=  -O2 -c" "EXTRA_COMPILER_FLAGS=-mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -nostartfiles -g -Wall -Wextra"
-BSP_BUILD	:= "BUILD_DIR=$(BUILD_DIR)"
+BSP_LIBX_NAME	:= libxil.a
+BSP_SFLAGS		:= "SHELL=/bin/sh"
+BSP_BUILD		:= "BUILD_DIR=$(abspath $(BUILD_DIR))"
+BSP_LEVEL		:= "LEVEL=$(abspath $(LEVEL))"
+BSP_LIB			:= $(BSP_DIR)/$(BSP_LIBX_NAME)
+BSP_LIB_PATH	:= "LIB=$(abspath $(BSP_LIB))"
+BSP_MAKE		:= $(CURDIR)/makefile.bspsrc
+BSP_ADD_DEF		:= "XDEFS=$(BSP_XDEFS)"
+BSP_ALL_FLAGS	:= $(BSP_SFLAGS) $(BSP_LEVEL) $(BSP_BUILD) $(BSP_ADD_DEF) $(BSP_LIB_PATH)
 
 
 # there are some weird Make errors that come from reading the target Makefile twice
 # not sure how to get rid of them, but they aren't causing any problems
 # https://www.gnu.org/software/make/manual/html_node/Error-Messages.html
 # see warning on ignoring & overriding
+# @{ { make -C $(1) -s include $(BSP_SFLAGS); } 2>&3 | sed 's/^/STDOUT: /'; } 3>&1 1>&2 | sed 's/^/STDERR: /' | sed '/: warning: /d'
 define bsp_inc_comp =
 @echo -e $(COLOR_MAGENTA)Running make include: $(NO_COLOR)$(1)
-@make -C $(1) -s include $(BSP_SFLAGS) 2>&1 |sed '/: warning: /d'
+@make -C $(1) --file=$(BSP_MAKE) --no-print-directory -s include $(BSP_SFLAGS) $(BSP_LEVEL) 2>&1 | sed '/: warning: /d'
 
 endef
 # $(BSP_BUILD)
 
 define bsp_lib_comp =
 @echo -e $(COLOR_MAGENTA)Running make libs $(1) $(NO_COLOR)
-@make -C $(1) -s libs $(BSP_SFLAGS) 2>&1 | sed '/: warning: /d'
+@make -C $(1) --file=$(BSP_MAKE) --no-print-directory -s libs $(BSP_ALL_FLAGS) -j4 2>&1 | sed '/: warning: /d'
+
+endef
+
+define bsp_lib_clean =
+@make -C $(1) --file=$(BSP_MAKE) --no-print-directory -s clean $(BSP_ALL_FLAGS) -j4 2>&1 | sed '/: warning: /d'
 
 endef
 
 bsp_lib:
 	@echo -e $(COLOR_YELLOW)compiling bsp $(NO_COLOR)
-	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_comp,$(dir)))
+	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_comp,$(abspath $(dir))))
 
 bsp_include:
 	@echo -e $(COLOR_YELLOW)including bsp $(NO_COLOR)
@@ -225,25 +265,43 @@ bsp_include:
 
 bsp: $(BSP_LIB)
 
-$(BSP_LIB):
-	make bsp_include
-	make bsp_lib
+$(BSP_LIB): | $(BUILD_DIR)/
+	@make --no-print-directory bsp_include
+	@make --no-print-directory bsp_lib
 
 ################################################################################
 # Debug stuff              			                                           #
 ################################################################################
 
-.PHONY: clean print
+.PHONY: clean superclean clean_exe print print_bsp clean_bsp clean_opt
 
+superclean: clean clean_bsp
+
+# the -delete flag is not POSIX, so use exec rm if otherwise
+# @find $(BUILD_DIR)/ ! -name $(BSP_LIBX_NAME) -type f -delete
 clean:
 	@rm -rf $(BUILD_DIR)
 
+clean_exe:
+	@rm -f $(EXE_FILES)
+
+clean_lib:
+	@rm -f $(BSP_LIB)
+
+clean_bsp:
+	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_clean, $(dir)))
+
+clean_opt:
+	@rm -f $(BUILD_DIR)/$(TARGET).opt.bc
+
 print:
+	@echo $(CURDIR)
 	@echo $(PROJECT_SRC)
 	@echo $(CSRCS)
-	@echo $(BSP_DIR)
-	@echo $(LIBS)
 
 print_bsp:
 	@echo $(BSP_SRCS)
 	@echo $(words $(BSP_SRCS))
+	@echo $(BSP_FRTOS_SRC)
+	@echo $(BSP_LIB)
+	@echo $(BSP_ADD_DEF)

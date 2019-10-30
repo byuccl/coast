@@ -16,7 +16,7 @@ COMPILER_ROOT = $(CCS_ROOT)/../tools/compiler
 
 #Change these every time you update CCS
 ARM_GCC_DIR   = $(COMPILER_ROOT)/gcc-arm-none-eabi-7-2017-q4-major
-ARM_COMPILER  = $(COMPILER_ROOT)/ti-cgt-arm_18.1.4.LTS
+ARM_COMPILER  = $(COMPILER_ROOT)/ti-cgt-arm_18.12.2.LTS
 ARMCL 		  = $(ARM_COMPILER)/bin/armcl
 
 #--------------------------------------------------------------
@@ -40,7 +40,8 @@ HEAP_SIZE  = 0x800
 
 # the HALCoGen code is built for gcc, but we're using Clang
 #	so some predefined symbols don't match names exactly
-REDEFINES = -D'__WCHAR_T_TYPE__=unsigned short' -D'__SIZE_T_TYPE__=unsigned' -D'__PTRDIFF_T_TYPE__=int'
+REDEFINES = -D'__PTRDIFF_T_TYPE__=int'
+# -D'__WCHAR_T_TYPE__=unsigned short' -D'__SIZE_T_TYPE__=unsigned' 
 
 #--------------------------------------------------------------
 # Compiler Flags
@@ -48,8 +49,8 @@ REDEFINES = -D'__WCHAR_T_TYPE__=unsigned short' -D'__SIZE_T_TYPE__=unsigned' -D'
 #--------------------------------------------------------------
 DEV_INCS = -nostdinc -I "$(PROJ_DIR)/" -I "$(PROJ_DIR)/include/" -I "$(ARM_COMPILER)/include/" -I "$(THIS_DIR)"
 DEV_OTHER_FLAGS = --preproc_with_compile
-CLANG_FLAGS := -fcolor-diagnostics --target=armv7r-eabi $(REDEFINES) -fshort-wchar
-DEV_CFLAGS 	:= -mv7R4 --code_state=32 -g --abi=eabi --enum_type=packed --diag_warning=225 --diag_wrap=off --display_error_number --enum_type=packed --wchar_t=16
+CLANG_FLAGS := -fcolor-diagnostics --target=armv7r-eabi $(REDEFINES) -fshort-wchar $(USER_CFLAGS)
+DEV_CFLAGS 	:= -mv7R4 --code_state=32 -g --abi=eabi --enum_type=packed --diag_warning=225 --diag_wrap=off --display_error_number --enum_type=packed --wchar_t=16 --preproc_with_compile  --asm_define=__clang__
 CL_INCS 	:= -i"$(PROJ_DIR)/" -i"$(PROJ_DIR)/include/" -i"$(ARM_COMPILER)/include/"
 LINK_INCS 	:= -i"$(ARM_COMPILER)/lib/" -i"$(CCS_ROOT)/arm/include/"
 DEV_LFLAGS 	:= --issue_remarks -z -m"$(TARGET).map" --heap_size=$(HEAP_SIZE) --stack_size=$(STACK_SIZE) -i"$(ARM_COMPILER)/lib" -i"$(ARM_COMPILER)/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="$(TARGET)_linkInfo.xml" --rom_model
@@ -106,14 +107,14 @@ ASM_OBJS=$(patsubst %.asm,$(BUILD_DIR)/%.o,$(notdir $(ASM_SRCS)))
 # the fact that some of the source files are already in assembly form means that
 #	 the parts of the code contained therein cannot be protected with COAST
 
-ifeq ($(SERIES),TMS570LC43xx)
-exe:
-	@make all -C ./Debug --quiet
+# ifeq ($(SERIES),TMS570LC43xx)
+# exe:
+# 	@make all -C ./Debug --quiet
 
-clean:
-	@make clean -C ./Debug --quiet
+# clean:
+# 	@make clean -C ./Debug --quiet
 
-else
+# else
 
 exe: $(BUILD_DIR)/$(TARGET).out
 
@@ -208,11 +209,11 @@ PRGMA_SRCH_PTRN := *.c.bak
 fix_pragmas:
 	sed -i -E 's/#pragma WEAK\([a-zA-Z0-9]*\)/__attribute__ ((weak))\n&/' $(PRGMA_SRCH_PTRN)
 
-endif
+# endif
 
 # make sure our library file exists
 # https://stackoverflow.com/questions/1789594/how-do-i-write-the-cd-command-in-a-makefile
-$(LIBRARY_NAME):
+$(ARM_COMPILER)/lib/$(LIBRARY_NAME):
 	@cd $(ARM_COMPILER)/lib ; \
 	echo -e $(COLOR_BLACK)Making run-time library$(NO_COLOR); \
 	./mklib --index=libc.a --pattern=$(LIBRARY_NAME) --compiler_bin_dir=$(ARM_COMPILER)/bin; \

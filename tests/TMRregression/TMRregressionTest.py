@@ -220,16 +220,18 @@ def main():
     logFileName = "regResults-{}-{}-{}-{}.log".format(now.month, now.day, now.hour, now.minute)
     # which pass configurations to run
     # OPTS = ["", "\"-TMR -s\"", "\"-TMR -i\""]
-    OPTS = ["", "\"-DWC -i\"", "\"-DWC -s\"",
-            "\"-TMR -i\"", "\"-TMR -s\"", "\"-CFCSS\"",
-			"\"-CFCSS -DWC -i\"", "\"-CFCSS -DWC -s\"", "\"-DWC -i -CFCSS\"",
-			"\"-DWC -s -CFCSS\"", "\"-CFCSS -TMR -i\"", "\"-CFCSS -TMR -s\"",
-			"\"-TMR -i -CFCSS\"", "\"-TMR -s -CFCSS\"", "\"-TMR -s -countErrors\"",
-			"\"-CFCSS -TMR -s -countErrors\"", "\"-TMR -s -countErrors -CFCSS\"",
-			"\"-DWC -noMemReplication\"", "\"-TMR -noMemReplication\"", # funny rules
+    OPTS = ["", "\"-DWC\"", "\"-TMR\"", "\"-TMR -s -countErrors\"",
+			"\"-DWC -noMemReplication\"", "\"-TMR -noMemReplication\"",
 			"\"-DWC -noLoadSync\"", "\"-TMR -noLoadSync\"",
 			"\"-DWC -noStoreDataSync\"", "\"-TMR -noStoreDataSync\"",
-			"\"-DWC -noStoreAddrSync\"", "\"-TMR -noStoreAddrSync\""]
+			"\"-DWC -noStoreAddrSync\"", "\"-TMR -noStoreAddrSync\"",
+            "\"-DWC -noMemReplication -noLoadSync\"",
+            "\"-TMR -noMemReplication -noLoadSync\"",
+            "\"-DWC -noMemReplication -noStoreDataSync\"",
+            "\"-TMR -noMemReplication -noStoreDataSync\"",
+            "\"-DWC -noMemReplication -noStoreAddrSync\"",
+            "\"-TMR -noMemReplication -noStoreAddrSync\""
+            ]
     # optimization levels passed to clang
     OPT_LEVELS = [" ","-O2 "]
     # base folder for tests
