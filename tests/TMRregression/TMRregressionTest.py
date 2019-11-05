@@ -235,7 +235,7 @@ def main():
     # optimization levels passed to clang
     OPT_LEVELS = [" ","-O2 "]
     # base folder for tests
-    # baseFolder = os.path.expanduser("~/llvm/llvm/tools/clang/test/CodeGen/")
+    # baseFolder = os.path.expanduser("~/coast/llvm-project/clang/test/CodeGen/")
     baseFolder = os.path.expanduser(args.baseFolder)
     # get a list of all the targets to test
     # execute the ones that have "int main()" in them; the rest will be compiled

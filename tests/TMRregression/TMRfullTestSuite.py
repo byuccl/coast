@@ -100,7 +100,7 @@ def copyCoremarkLogfile(file_path, file_name, dst_file):
 #   and the folder where we put the log file from each run
 def testCoremark(testLog, nowFolder):
     # Coremark:
-    coremark_folder = os.path.expanduser("~/llvm/tests/coremark/")
+    coremark_folder = os.path.expanduser("~/coast/tests/coremark/")
     logFile = createNewLogfile("coremark", nowFolder)
     printIntro(coremark_folder,logFile,['', '-TMR'])
     with open(logFile, 'a') as lf:
@@ -155,7 +155,7 @@ def fft_subtests(fft_folder,lf):
 
 def testKissFFT130(testLog, nowFolder):
     # kiss_fft130
-    fft_folder = os.path.expanduser("~/llvm/tests/kiss_fft130/custom/")
+    fft_folder = os.path.expanduser("~/coast/tests/kiss_fft130/custom/")
     logFile = createNewLogfile("kiss_fft130", nowFolder)
     printIntro(fft_folder, logFile, ['', '-TMR'])
     with open(logFile, 'a') as lf:
@@ -176,14 +176,14 @@ def testKissFFT130(testLog, nowFolder):
     os.system("date")
 
 def main():
-    progFolder = os.path.expanduser("~/llvm/tests/TMRregression/")
+    progFolder = os.path.expanduser("~/coast/tests/TMRregression/")
     # this command will be changed every run, and have added to it
     #   the name of the next folder to do the tests in
     cmd = ['python3', 'TMRregressionTest.py', '/dev/null']
     # all of the places to run the command
-    test_dirs = ['~/llvm/llvm/tools/clang/test/ASTMerge/',
-                 '~/llvm/tests/TMRregression/unitTests/',
-                 '~/llvm/llvm/tools/clang/test/CodeGen/']
+    test_dirs = ['~/coast/llvm-project/clang/test/ASTMerge/',
+                 '~/coast/tests/TMRregression/unitTests/',
+                 '~/coast/llvm-project/clang/test/CodeGen/']
     now = datetime.datetime.now()
     # nowString = "{}-{}-{}".format(now.day, now.hour, now.minute)
     nowString = getDateString()

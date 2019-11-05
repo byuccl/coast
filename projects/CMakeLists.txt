@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 
-set ( LLVM_ROOT ..)
-if(NOT EXISTS ${LLVM_ROOT})
-	message ( FATAL_ERROR " LLVM_ROOT (${LLVM_ROOT}) is invalid ")
+set ( COAST_BASE_DIR ..)
+if(NOT EXISTS ${COAST_BASE_DIR})
+	message ( FATAL_ERROR " COAST_BASE_DIR (${COAST_BASE_DIR}) is invalid ")
 endif ()
 
 set(LLVM_DIR ../build/cmake/modules/CMakeFiles)
@@ -15,7 +15,7 @@ include(HandleLLVMOptions)
 include(AddLLVM)
 
 
-list (APPEND LLVM_INCLUDE_DIRS "${LLVM_ROOT}/llvm/include")
+list (APPEND LLVM_INCLUDE_DIRS "${COAST_BASE_DIR}/llvm-project/llvm/include")
 
 add_definitions ( ${LLVM_DEFINITIONS})
 include_directories ( ${LLVM_INCLUDE_DIRS})

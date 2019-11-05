@@ -26,7 +26,7 @@ LIBS 		+= $(PROJ_LIBS)
 # NEON support
 ifneq ($(ARM_NEON),)
 FPU_NAME := neon
-LIB_INCS := -I"$(COAST_ROOT)/build/lib/clang/7.0.0/include/" -I"$(COAST_ROOT)/llvm/tools/clang/lib/Headers/" $(LIB_INCS)
+LIB_INCS := -I"$(COAST_ROOT)/build/lib/clang/7.1.0/include/" -I"$(COAST_ROOT)/llvm-project/clang/lib/Headers/" $(LIB_INCS)
 else
 FPU_NAME := vfpv3
 endif

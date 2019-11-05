@@ -399,13 +399,9 @@ void dataflowProtection::processAnnotations(Module& M) {
 			for (int i=0; i < ua->getNumOperands(); i++) {
 				auto element = ua->getOperand(i);
 				if (BitCastOperator* bc = dyn_cast<BitCastOperator>(element)) {
-					errs() << " >>> Hooray, found a bitcast!\n";
 					if (GlobalVariable* gv = dyn_cast<GlobalVariable>(bc->getOperand(0))) {
-						errs() << *gv << "\n";
 						volatileGlobals.insert(gv);
 					} else if (Function* fn = dyn_cast<Function>(bc->getOperand(0))) {
-						errs() << " <<< found a used function:\n";
-						errs() << fn->getName() << "\n";
 						usedFunctions.insert(fn);
 					}
 				}	// TODO: what if it doesn't have to be bit-casted?
