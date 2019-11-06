@@ -3,6 +3,13 @@
 Release Notes
 **************
 
+
+November 2019
+==============
+
+Changed the source of the LLVM project files from SVN (`deprecated <https://llvm.org/docs/Proposals/GitHubMove.html>`_) to the Git mono-repo, `version 7.1.0 <https://github.com/llvm/llvm-project/tree/llvmorg-7.1.0>`_.
+
+
 October 2019
 ==============
 
