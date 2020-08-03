@@ -35,4 +35,4 @@ $(TARGET): $(TARGET).o $(FREEDOM_BSP_LIBS)
 	--specs=nano.specs
 
 clean:
-	rm -f $(TARGET) *.o *.ll
+	rm -f $(TARGET) *.o *.ll *.bc

@@ -2,8 +2,19 @@
  * arm_locks.c
  *
  * This is to test the synchronization primitives from the ARM ISA.
+ * TODO: add more primitives
+ *
+ * __swp
+ * "swap data between registers and memory"
+ * https://developer.arm.com/documentation/dui0472/m/compiler-specific-features/--swp-intrinsic
  */
 
+#ifndef __arm
+#error This unit test only works with ARM targets
+#endif
+
+
+/********************************** Includes **********************************/
 #include <stdio.h>
 #include <arm_acle.h>
 
@@ -13,11 +24,11 @@
 __DEFAULT_NO_xMR
 
 
-#ifdef __arm
+/********************************* Functions **********************************/
+// wrap intrinsic
 void swap(unsigned int* a, unsigned int* b) __xMR {
     *a = __swp(*a, (unsigned int*)b);
 }
-#endif
 
 
 int main() {

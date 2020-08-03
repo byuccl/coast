@@ -27,22 +27,29 @@ struct myStruct
 };
 
 
+// Modify struct value by reference
 void touchStruct(struct myStruct* ms) FUNCTION_TAG {
     (ms->x)++;
-
-    if ( (ms->x) == 1) {
-        printf("ms == 1\r\n");
-    } else {
-        printf("ms == %d\r\n", ms->x);
-    }
-
     return;
 }
 
 
 int main() {
+    // setup struct
     struct myStruct ms;
     ms.x = 0;
     ms.y = 0;
+
+    // modify struct
     touchStruct(&ms);
+
+    // check value
+    if ( (ms.x) == 1) {
+        printf("Success!\n");
+    } else {
+        printf("Error: %d\n", ms.x);
+        return ms.x;
+    }
+
+    return 0;
 }

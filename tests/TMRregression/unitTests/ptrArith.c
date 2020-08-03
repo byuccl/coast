@@ -108,6 +108,8 @@ void callFnPtr(int* x, MyFnType fnPtr) __xMR {
 /************************************ main ************************************/
 #define ASIZE 8
 int main() {
+    int status = 0;
+
     ///////////////////////////// mutate array /////////////////////////////
     int a1[ASIZE];
     int a2[ASIZE] = {1, 2, 0, 4, 0, -1, 7, 5};   //golden
@@ -119,6 +121,7 @@ int main() {
 
     if (memcmp(a1, a2, ASIZE * sizeof(int))) {
         printf(" !! Error !!\n");
+        status += 1;
     }
 
     /////////////////////////////// xor swap ///////////////////////////////
@@ -141,6 +144,7 @@ int main() {
     printf(" %d\n", incThis);
     if (incThis != 3) {
         puts("Error!");
+        status += 1;
     }
 
     /////////////////////////// double pointers ////////////////////////////
@@ -161,6 +165,9 @@ int main() {
     doubleCross(&val);
     //expected 0x00AB
     printf(" 0x%04X\n", val);
+    if (val != 0x00AB) {
+        status += 1;
+    }
 
     /////////////////////////// storing pointers ///////////////////////////
     int sp0[4] = {4, 8, 16, 32};
@@ -172,6 +179,18 @@ int main() {
     int fnX = 3;
     callFnPtr(&fnX, &intMath);
     printf("%2d\n", fnX);
+    //expected 5
+    // TODO: call gets replicated
+    // if (fnX != 5) {
+    //     status += 1;
+    // }
 
-    return 0;
+    ///////////////////////////// Status Check /////////////////////////////
+    if (status) {
+        printf("Error: %d\n", status);
+    } else {
+        printf("Success!\n");
+    }
+
+    return status;
 }

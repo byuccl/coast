@@ -35,7 +35,7 @@ ifeq ($(BOARD), $(BOARD_HIFIVE1))
 	-ex "monitor resume" \
 	-ex "monitor shutdown" \
 	-ex "quit" \
-	&& echo "Successfully uploaded 'hello' to freedom-e300-hifive1."
+	&& echo "Successfully uploaded '$(TARGET)' to freedom-e300-hifive1."
 
 else ifeq ($(BOARD), $(BOARD_X86))
 	@echo -e $(COLOR_YELLOW)Executing$(NO_COLOR) $(TARGET).out
@@ -46,7 +46,12 @@ else ifeq ($(BOARD), $(BOARD_LLI))
 	@$(LLVM_LLI) $(LLI_ARGS) $(TARGET).ll
 
 else ifeq ($(BOARD), $(BOARD_PYNQ))
-	ELF_FILE=./build/$(TARGET) \
+	ELF_FILE=./$(BUILD_DIR)/$(TARGET) \
+	JTAG_CABLE_FILTER="Xilinx PYNQ-Z1 *" \
+	$(XILINX_SDK)/bin/xsdk -batch  $(BOARD_DIR)/sw/run_elf.tcl | $(SKIP_SECTION)
+
+else ifeq ($(BOARD), $(BOARD_PYNQ_RTOS))
+	ELF_FILE=./$(BUILD_DIR)/$(TARGET) \
 	JTAG_CABLE_FILTER="Xilinx PYNQ-Z1 *" \
 	$(XILINX_SDK)/bin/xsdk -batch  $(BOARD_DIR)/sw/run_elf.tcl | $(SKIP_SECTION)
 
@@ -82,6 +87,13 @@ ifeq ($(BOARD), $(BOARD_ULTRA96))
 	$(VIVADO)/bin/vivado -mode batch -source $(BOARDS)/program_bit.tcl -notrace
 
 else ifeq ($(BOARD), $(BOARD_PYNQ))
+	BITSTREAM=$(BOARD_DIR)/hw/system_wrapper.bit \
+	JTAG_BOARD_FILTER="localhost:3121/xilinx_tcf/Digilent/*" \
+	JTAG_DEVICE_INDEX=1 \
+	JTAG_REGISTER_DONE_BIT=REGISTER.CONFIG_STATUS.BIT14_DONE_PIN \
+	$(VIVADO)/bin/vivado -mode batch -source $(BOARDS)/program_bit.tcl -notrace
+
+else ifeq ($(BOARD), $(BOARD_PYNQ_RTOS))
 	BITSTREAM=$(BOARD_DIR)/hw/system_wrapper.bit \
 	JTAG_BOARD_FILTER="localhost:3121/xilinx_tcf/Digilent/*" \
 	JTAG_DEVICE_INDEX=1 \

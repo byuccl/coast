@@ -6,30 +6,86 @@
 # but no definitive answer is given
 # https://stackoverflow.com/questions/3509215/llvm-jit-and-native
 
-PROJECT_SRC := ${CURDIR}
-C_SRCS		= $(wildcard $(PROJECT_SRC)/*.c)
-CPP_SRCS	= $(wildcard $(PROJECT_SRC)/*.cpp)
+PROJECT_SRC ?= ${CURDIR}
+SRCFILES    ?= $(wildcard $(PROJECT_SRC)/*.c*)
+C_SRCS 		= $(filter %.c,$(SRCFILES))
+CPP_SRCS 	= $(filter %.cpp,$(SRCFILES))
 BCFILES		= $(patsubst %.c,%.clang.bc,$(notdir $(C_SRCS)))
 BCPPFILES	= $(patsubst %.cpp,%.clang.bcpp,$(notdir $(CPP_SRCS)))
+USER_INCS   ?=
 
 CLANG_FLAGS := -fcolor-diagnostics $(USER_CFLAGS)
+# user link-time flags
 XLFLAGS 	?= -lm
+XLLCFLAGS   ?=
+PROF_FLAGS  := -L"/home/$(USER)/tools/gperftools-2.7/lib-install/lib" -lprofiler
+# set up includes
 INCS		:=-I$(LEVEL)
-
+ifneq ($(USER_INCS),)
+USR_INC_PFX	:= $(addprefix -I,$(USER_INCS))
+INCS		+= $(USR_INC_PFX)
+endif
 
 exe: $(TARGET).out
+
+############# CPU Profiling #############
+# build executable with pperf library enabled
+build_prof: $(TARGET).prof.out
+
+$(TARGET).prof.out: $(TARGET).s
+ifeq ($(CPP_SRCS),)
+	$(CLANG) $< $(XLFLAGS) $(PROF_FLAGS) -o $@
+else
+	$(CLANG++) $< $(XLFLAGS) $(PROF_FLAGS) -o $@
+endif
+
+# run and collect profile
+profile:
+	env CPUPROFILE=$(TARGET).prof ./$(TARGET).prof.out
+
+# display profiling results with gv
+gv_prof:
+	pprof --gv ./$(TARGET).prof.out ./$(TARGET).prof
+
+pdf_prof:
+	pprof --pdf ./$(TARGET).prof.out ./$(TARGET).prof > $(TARGET).prof.pdf
+
+############ Cache Profiling ############
+# all sizes in bytes
+ICACHE_SIZE  		:= 32768
+DCACHE_SIZE  		:= 32768
+LLCACHE_SIZE 		:= 524288
+ICACHE_ASSOC  		:= 4
+DCACHE_ASSOC  		:= 4
+LLCACHE_ASSOC 		:= 8
+ICACHE_LINE_SIZE  	:= 32
+DCACHE_LINE_SIZE  	:= 32
+LLCACHE_LINE_SIZE 	:= 32
+
+ICACHE_PARAMS := --I1=$(ICACHE_SIZE),$(ICACHE_ASSOC),$(ICACHE_LINE_SIZE)
+DCACHE_PARAMS := --D1=$(DCACHE_SIZE),$(DCACHE_ASSOC),$(DCACHE_LINE_SIZE)
+LLCACHE_PARAMS := --LL=$(LLCACHE_SIZE),$(LLCACHE_ASSOC),$(LLCACHE_LINE_SIZE)
+CACHEGRIND_PARAMS := --tool=cachegrind --cache-sim=yes
+CACHEGRIND_PARAMS += $(ICACHE_PARAMS) $(DCACHE_PARAMS) $(LLCACHE_PARAMS)
+CACHEGRIND_PARAMS += --cachegrind-out-file=$(TARGET).cache_prof.log
+
+cache_prof:
+	valgrind $(CACHEGRIND_PARAMS) ./$(TARGET).out
+
+cache_view:
+	kcachegrind $(TARGET).cache_prof.log 2> /dev/null
 
 ############### Link step ###############
 $(TARGET).out: $(TARGET).s
 ifeq ($(CPP_SRCS),)
-	$(CLANG) $(TARGET).s $(XLFLAGS) -o $@
+	@$(CLANG) $(TARGET).s $(XLFLAGS) -o $@
 else
-	$(CLANG++) $(TARGET).s $(XLFLAGS) -o $@
+	@$(CLANG++) $(TARGET).s $(XLFLAGS) -o $@
 endif
 
 ################## LLC ##################
 %.s: %.opt.bc
-	$(LLVM_LLC) -asm-verbose $< -o=$@
+	@$(LLVM_LLC) -asm-verbose $(XLLCFLAGS) $< -o=$@
 
 $(TARGET).bc: $(TARGET).opt.bc
 	@cp $< $@
@@ -39,7 +95,8 @@ $(TARGET).bc: $(TARGET).opt.bc
 $(TARGET).opt.bc: $(TARGET).lbc
 	@echo -e $(COLOR_BLUE)Running through optimizer $(NO_COLOR)
 	@echo "  flags = $(OPT_FLAGS) $(OPT_PASSES)"
-	$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_DIS) -f $@
 
 %.ll: %.bc
 	@$(LLVM_DIS) -f $<
@@ -47,21 +104,59 @@ $(TARGET).opt.bc: $(TARGET).lbc
 ############### LLVM-LINK ###############
 $(TARGET).lbc: $(BCFILES) $(BCPPFILES)
 	@echo -e $(COLOR_MAGENTA)Linking source files $(NO_COLOR)
-	$(LLVM_LINK) $^ -o $(TARGET).lbc
+	@$(LLVM_LINK) $^ -o $(TARGET).lbc
 
 ################# CLANG #################
 # Lowest level target should depend on the Makefiles
-%.clang.bc: %.c
+%.clang.bc: $(PROJECT_SRC)/%.c
 	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
 	@echo '  'flags = $(CLANG_FLAGS)
 	@$(CLANG) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
 
 ################ CLANG++ ################
 # Lowest level target should depend on the Makefiles
-%.clang.bcpp: %.cpp $(MAKEFILES)
+%.clang.bcpp: $(PROJECT_SRC)/%.cpp
 	@echo -e $(COLOR_BLUE) Building $@ $(NO_COLOR)
 	@echo '  'flags = $(CLANG_FLAGS)
-	$(CLANG++) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
+	@$(CLANG++) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
+
+
+#########################################
+# support sources in sub-directories
+
+# C files
+define bc_file_compile =
+%.clang.bc: $(1)/%.c
+	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
+	@$$(CLANG) $$(INCS) $$(CLANG_FLAGS) -emit-llvm $$< -c -o $$@
+
+endef
+
+# C++ files
+define bcpp_file_compile =
+%.clang.bcpp: $(1)/%.cpp
+	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
+	@$$(CLANG++) $$(INCS) $$(CLANG_FLAGS) -emit-llvm $$< -c -o $$@
+
+endef
+
+$(foreach dir,$(PROJECT_SUB_DIRS),$(eval $(call bc_file_compile,$(dir))))
+$(foreach dir,$(PROJECT_SUB_DIRS),$(eval $(call bcpp_file_compile,$(dir))))
+
+
+############### cleaning ################
+.PHONY: clean clean_opt debug_print
 
 clean:
 	@$(RM) -rf *.bc *.bcpp *.lbc *.llvm.bc *.ll *.s $(TARGET).out
+
+clean_opt:
+	@$(RM) $(TARGET).lbc
+
+# used to verify correct Macro definition
+debug_print:
+	@echo SRCFILES = $(SRCFILES)
+	@echo C_SRCS = $(C_SRCS)
+	@echo CPP_SRCS = $(CPP_SRCS)
+	@echo BCFILES = $(BCFILES)
+	@echo BCPPFILES = $(BCPPFILES)

@@ -1,12 +1,12 @@
 /*
-    Unit test designed to exercise returning struct types.
-    Can change the data types to see what happens.
-
-    Notes:
-    if the data types can fit within a normal wordsize of the target system,
-    such as how 2 ints can fit into a 64-bit register, then it's not a problem.
-    float returns a vector type, which is interesting.
-*/
+ *  Unit test designed to exercise returning struct types.
+ *  Can change the data types to see what happens.
+ *
+ *  Notes:
+ *  if the data types can fit within a normal wordsize of the target system,
+ *  such as how 2 ints can fit into a 64-bit register, then it's not a problem.
+ *  float returns a vector type, which is interesting.
+ */
 
 #include <stdio.h>
 

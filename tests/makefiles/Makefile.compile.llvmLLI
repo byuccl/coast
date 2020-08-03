@@ -40,8 +40,13 @@ $(TARGET).lbc: $(BCFILES) $(BCPPFILES)
 	@echo '  'flags = $(CLANG_FLAGS)
 	$(CLANG++) $(INCS) $(CLANG_FLAGS) -emit-llvm $< -c -o $@
 
+.PHONY: clean clean_opt cfg
+
 clean:
 	@$(RM) -rf *.bc *.bcpp *.lbc *.llvm.bc *.ll ./cfg
+
+clean_opt:
+	@$(RM) $(TARGET).lbc
 
 cfg: $(TARGET).opt.ll $(TARGET).clang.ll
 	@rm -rf cfg

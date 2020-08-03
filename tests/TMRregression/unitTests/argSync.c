@@ -40,5 +40,14 @@ int runTest(int a) __xMR {
 
 int main() {
     int x = runTest(32);
-    printf("%d\n", x);
+    // expected value: 5
+
+    if (x == 5) {
+        printf("Success!\n");
+    } else {
+        printf("Error: %d\n", x);
+        return x;
+    }
+
+    return 0;
 }

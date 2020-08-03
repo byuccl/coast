@@ -32,13 +32,15 @@ int main() {
         vec.push_back(i);
     }
 
+    // query size
     std::size_t vsize = vec.size();
-    std::cout << "vector size: " << vsize << "\n";
 
-    //check
+    // check
     if (vsize == SIZE) {
+        std::cout << "Success!\n";
         return 0;
     } else {
+        std::cout << "vector size: " << vsize << "\n";
         return -1;
     }
 
