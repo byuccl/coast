@@ -18,9 +18,8 @@ Features
 
 - Experimental stack protection
 
-- 7 new command line arguments
-
-See :ref:`coast_cli_params` for more information.
+- | 7 new command line arguments
+  | See :ref:`coast_cli_params` for more information.
 
 
 Directives

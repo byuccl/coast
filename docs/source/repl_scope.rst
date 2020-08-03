@@ -23,4 +23,4 @@ One of the most common problems to be aware of is pointers which cross the SoR b
 Example
 ==========
 
-The unit test `linkedList.c <https://github.com/byuccl/coast/blob/prepRelease_1_4/tests/TMRregression/unitTests/linkedList.c>`_ shows exactly how SoR crossings can go wrong by looking at a possible implementation of a linked list.
+The unit test `linkedList.c <https://github.com/byuccl/coast/blob/master/tests/TMRregression/unitTests/linkedList.c>`_ shows exactly how SoR crossings can go wrong by looking at a possible implementation of a linked list.
