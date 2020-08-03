@@ -1,12 +1,17 @@
 .. guide to using Eclipse with LLVM
 
-Using Eclipse with LLVM
-************************
+Using an IDE to aid LLVM development
+*************************************
 
-You can write your code in a plain text editor, or you can use Eclipse to help you manage all of the classes and methods. This guide was written for Eclipse 4.10.0 using the CDT.
+We have used both Eclipse and Visual Studio Code in the development of COAST.  This is very helpful because it allows code completion hints that inform you what methods are available for specific classes.
+
+Using Eclipse with LLVM
+=========================
+
+This guide was written for Eclipse 4.10.0 using the CDT.
 
 Setting up the project
-=========================
+-------------------------
 
 1. Select "File -> New -> Makefile Project with Existing Code".
 2. Enter ``projects`` as the project name.
@@ -19,7 +24,7 @@ Setting up the project
 9. When you click on the "Build" button the projects will be compiled.
 
 Building the projects
-==========================
+-------------------------
 
 1. Right click on the ``projects/build`` subdirectory, then "Make Targets -> Create".
 2. Call the target name ``all`` and click OK.
@@ -28,7 +33,7 @@ Building the projects
 
 
 Fixing the CDT settings
-========================
+-------------------------
 
 The default settings of the project are not sufficient to allow the Eclipse CDT indexer to work correctly.  While not necessary to fix the CDT settings, it allows you to use the auotcomplete functionality of Eclipse.
 
@@ -49,3 +54,22 @@ The default settings of the project are not sufficient to allow the Eclipse CDT 
 #. Under the "Discovery" tab select "CDT GCC Built-in Compiler Settings"
 #. Edit the "Command to get compiler specs" the same as before
 #. Select "Apply and Close"
+
+
+Using VS Code with LLVM
+=========================
+
+1. Open VS Code
+#. File -> Open Folder
+#. Select the directory that contains the files for the pass you want to develop
+#. On the bottom ribbon at the right there will be a button next to the language configuration (ours says "Linux")
+#. Hovering over this button says "C/C++ Configuration". Click on it
+#. You will be taken to a page that allows you to set up a specific configuration for this directory.
+#. Click the button "Add Configuration" and give it a name
+#. Add the path to the LLVM include files in the section "Include path"
+#. For example, because I built LLVM from source, I added the following:
+
+.. code-block:: bash
+
+    /home/$USER/coast/llvm-project/llvm/include
+    /home/$USER/coast/build/include

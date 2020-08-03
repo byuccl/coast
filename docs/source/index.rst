@@ -14,11 +14,12 @@ COAST
 
     setup
     make_system
-    eclipse
     passes
+    repl_scope
     troubleshooting
-    cfcss
     release_notes
+    eclipse
+    cfcss
 
 
 Folder guide

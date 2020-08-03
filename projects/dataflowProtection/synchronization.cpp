@@ -1412,6 +1412,18 @@ void dataflowProtection::insertTMRCorrectionCount(Instruction* cmpInst, GlobalVa
 			"errorHandler." + Twine(originalBlock->getParent()->getName()),
 			originalBlock->getParent(), originalBlock);
 
+	if (countSyncsFlag) {
+		/*
+		 * Increment global sync counter
+		 */
+		// Populate new block -- load global counter, increment, store
+		LoadInst* loadSyncCounter = new LoadInst(dynamicSyncCount, "ldSyncCnt", cmpInst);
+		Constant* one = ConstantInt::get(loadSyncCounter->getType(), 1, false);
+		BinaryOperator* incSyncCounter = BinaryOperator::CreateAdd(
+										loadSyncCounter, one, "incSyncCnt", cmpInst);
+		StoreInst* SI = new StoreInst(incSyncCounter, dynamicSyncCount, cmpInst);
+	}
+
 	// Populate new block -- load global counter, increment, store
 	LoadInst* LI = new LoadInst(TMRErrorDetected, "errFlagLoad", errBlock);
 	Constant* one = ConstantInt::get(LI->getType(), 1, false);
