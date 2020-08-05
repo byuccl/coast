@@ -5,6 +5,7 @@
  * The most important requirement is that it actually syncs on the values.
  * We add in some dynamically allocated structs as examples of things we
  *  wouldn't want to xMR
+ * Also test if we can turn on/off the protection of specific function arguments.
  */
 
 #include <stdio.h>
@@ -35,6 +36,23 @@ int moreMath(int a, int b) __xMR {
     return (a * p) + (b << q);
 }
 
+void halfProtected(int* a, int* __NO_xMR b) __xMR {
+    int* local_a = a;
+    int* local_b = b;
+}
+
+void halfNotProtected(int* a, int* __xMR b) {
+    int* local_a = a;
+    int* local_b = b;
+}
+
+void callHalfFunctions() __xMR {
+    int a = 2;
+    int b = 3;
+    halfProtected(&a, &b);
+    halfNotProtected(&a, &b);
+}
+
 
 int main() {
     int __xMR result;
@@ -59,6 +77,9 @@ int main() {
         printf("Error!\n");
         status |= -1;
     }
+
+    // this doesn't do anything
+    callHalfFunctions();
 
     return status;
 }

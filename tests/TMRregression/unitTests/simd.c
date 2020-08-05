@@ -4,6 +4,10 @@
  * This unit test is to see how the LLVM IR represents SIMD instructions
  * All this does is double all of the values in a matrix
  * have to make sure the flag XCFLAGS="-O3"
+ *
+ * SoR notes:
+ * matrix0 is not protected, but they are just scalar values, so COAST
+ *  synchronizes the values before storing to it.
  */
 
 #include <stdio.h>
@@ -50,6 +54,8 @@ test_t golden0[ROW_SIZE][COL_SIZE] = {
 
 // don't inline the matrix multiply call so it can be xMR'd correctly
 __attribute__((noinline))
+// TODO: why do we need to explicitly mark this?
+__COAST_IGNORE_GLOBAL(matrix0)
 #ifdef WITH_INTRINSICS
 #ifdef __x86_64
 // hand optimized for x86_64 architecture with the SSE2 extension

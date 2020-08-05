@@ -24,23 +24,22 @@ CPPFLAGS := -stdlib=libc++ -I/usr/include/c++/5.4.0/ -I/usr/include/x86_64-linux
 # CPPSTD - C++ standard to use when compiling files, default is c++11
 ###########################################################
 
-LLVMROOT = $(HOME)/coast
-CLANG = $(LLVMROOT)/build/bin/clang
-CLANG++ = $(LLVMROOT)/build/bin/clang++
-LLVMDIS = $(LLVMROOT)/build/bin/llvm-dis
-LLVMOPT = $(LLVMROOT)/build/bin/opt
-LLVMLLC	= $(LLVMROOT)/build/bin/llc
-LLVMLINK= $(LLVMROOT)/build/bin/llvm-link
+CLANG = clang-7
+CLANG++ = clang++-7
+LLVMDIS = llvm-dis-7
+LLVMOPT = opt-7
+LLVMLLC	= llc-7
+LLVMLINK= llvm-link-7
 
-export COAST_ROOT = $(LLVMROOT)
+export COAST_ROOT = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/../../
 
 CFLAGS = -I$(SRCFOLDER)
 
 ## Recursive wildcard
 rwildcard=$(wildcard $1$2)$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
-PROJECT_BUILD_DIR = $(LLVMROOT)/projects/build/
+PROJECT_BUILD_DIR = $(COAST_ROOT)/projects/build/
 PROJECT_LIBS := $(call rwildcard,$(PROJECT_BUILD_DIR),*.so)
-OPT_LIBS_LOAD = -load $(LLVMROOT)/projects/build/errorBlocks/ErrorBlocks.so -load $(LLVMROOT)/projects/build/dataflowProtection/DataflowProtection.so $(foreach lib, $(PROJECT_LIBS) , -load $(lib))
+OPT_LIBS_LOAD = -load $(COAST_ROOT)/projects/build/errorBlocks/ErrorBlocks.so -load $(COAST_ROOT)/projects/build/dataflowProtection/DataflowProtection.so $(foreach lib, $(PROJECT_LIBS) , -load $(lib))
 
 CFILES = $(filter %.c,$(SRCFILES))
 CPPFILES = $(filter %.cpp,$(SRCFILES))
@@ -52,6 +51,15 @@ endif
 ifndef $(BCPPFILES)
 BCPPFILES = $(CPPFILES:.cpp=.bcpp)
 endif
+
+# ANSI escape color codes
+COLOR_BLUE			:= '\033[0;34m'
+COLOR_MAGENTA		:= '\033[0;35m'
+COLOR_YELLOW		:= '\033[0;33m'
+COLOR_GREEN			:= '\033[0;32m'
+COLOR_BLACK			:= '\033[0;30m'
+NO_COLOR			:= '\033[0m'
+HIGHLIGHT			:= '\033[0;7m'
 
 .PHONY: debug
 
@@ -74,7 +82,7 @@ $(TARGET): $(TARGET).s
 ifeq ($(CPPFILES),)
 	$(CLANG) $(TARGET).s $(XLFLAGS) -o $@
 else
-	$(CLANG++) $(TARGET).s $(XLFLAGS) -o $@
+	$(CLANG++) -stdlib=libc++ $(TARGET).s $(XLFLAGS) -o $@
 endif
 
 # rule for .s files
@@ -83,12 +91,12 @@ $(TARGET).s: $(TARGET).opt.bc
 
 # rule for opt.bc files
 $(TARGET).opt.bc: $(TARGET).clang.bc
-	$(LLVMDIS) -f $<
+	@$(LLVMDIS) -f $<
 	$(LLVMOPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
-	$(LLVMDIS) -f $@
+	@$(LLVMDIS) -f $@
 
 $(TARGET).clang.bc: $(BCFILES) $(BCPPFILES)
-	$(LLVMLINK) $(BCFILES) $(BCPPFILES) -o $(TARGET).clang.bc
+	@$(LLVMLINK) $(BCFILES) $(BCPPFILES) -o $(TARGET).clang.bc
 
 # rule for .bc files
 %.bc: $(SRCFOLDER)/%.c

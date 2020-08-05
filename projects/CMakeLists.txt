@@ -1,13 +1,16 @@
 cmake_minimum_required(VERSION 3.5)
+project(coast)
 
 set ( COAST_BASE_DIR ..)
 if(NOT EXISTS ${COAST_BASE_DIR})
 	message ( FATAL_ERROR " COAST_BASE_DIR (${COAST_BASE_DIR}) is invalid ")
 endif ()
 
-set(LLVM_DIR ../build/cmake/modules/CMakeFiles)
+# set(LLVM_DIR ../build/cmake/modules/CMakeFiles)
 
-find_package ( LLVM REQUIRED CONFIG NO_DEFAULT_PATH)
+find_package ( LLVM 7.0 EXACT REQUIRED CONFIG )
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 

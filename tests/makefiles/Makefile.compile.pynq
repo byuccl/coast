@@ -1,7 +1,7 @@
 ################################################################################
 # Sources
 PROJECT_SRC := ${CURDIR} $(SRC_DIRS)
-CSRCS 		:= $(foreach dir,$(PROJECT_SRC),$(wildcard $(dir)/*.c))
+CSRCS 		?= $(foreach dir,$(PROJECT_SRC),$(wildcard $(dir)/*.c))
 BUILD_DIR	?= ./build
 INC_DIRS	?=
 BC_FILES	:= $(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(CSRCS)))
@@ -16,12 +16,25 @@ BSP_INC 	:= $(BSP_DIR)/include
 
 ################################################################################
 # Flags
-LIB_INCS	:= -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include/"  -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include-fixed/" -I"$(SDK_TRIPLE)/arm-none-eabi/include/" -I"$(SDK_TRIPLE)/arm-none-eabi/libc/usr/include/"
+LIB_INCS	:= -I"$(COAST_ROOT)/llvm-project/clang/lib/Headers/" -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include/"  -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include-fixed/" -I"$(SDK_TRIPLE)/arm-none-eabi/include/" -I"$(SDK_TRIPLE)/arm-none-eabi/libc/usr/include/"
 NEW_INCS	:= $(addprefix -I,$(INC_DIRS))
 SRC_INCS	:= -nostdinc -I"$(BSP_INC)/" $(LIB_INCS) $(NEW_INCS)
 LIB_DIR		?= $(BSP_DIR)
 LIBS		:= -lxil -lgcc -lc
 LIBS 		+= $(PROJ_LIBS)
+# user link-time flags
+XLFLAGS		?=
+XLLCFLAGS	?=
+
+ifneq ($(BUILD_FOR_SIMULATOR),)
+# how to use ARM semihosting interface
+SEMIHOSTING_PATH := /usr/lib/arm-none-eabi/newlib/fpu
+SEMIHOSTING_LIB  := rdimon
+LIB_DIR			 := $(BSP_DIR)/qemu_bsp
+QEMU_DIR 		 := $(COAST_ROOT)/simulation/qemu-ccl
+QEMU_INSTALL_DIR := $(QEMU_DIR)/install/bin
+QEMU_PLUGIN_DIR  := $(QEMU_DIR)/build/tests/plugin
+endif
 
 # NEON support
 ifneq ($(ARM_NEON),)
@@ -47,7 +60,7 @@ CLANG_FLAGS += -mfloat-abi=softfp -mfpu=neon-fp-armv8 -D"__ARM_NEON"
 endif
 CLANG_FLAGS += $(addprefix -D,$(USER_DEFS))
 
-LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=arm -mcpu=cortex-a9 -mattr=+vfp3 -float-abi=hard
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=arm -mcpu=cortex-a9 -mattr=+vfp3 -float-abi=hard $(XLLCFLAGS)
 
 MC_FLAGS 	:= -triple=armv7-none-gnueabi -mcpu=cortex-a9 -target-abi=hard -filetype=obj
 
@@ -92,12 +105,18 @@ $(BUILD_DIR)/$(NEW_LINK_F): $(LNK_SCRIPT)
 ################################################################################
 LD_FLAGS	:= -fdiagnostics-color -fshort-enums -mcpu=cortex-a9 -mfpu=$(FPU_NAME) -mfloat-abi=hard -mhard-float -Wl,--build-id=none -specs=$(SPEC_SRC) -Wl,-T -Wl,$(BOARD_SW)/lscript.ld -Wl,-Map,$(BUILD_DIR)/$(TARGET).map
 LD_LIBS		:= -Wl,-L$(BUILD_DIR),-L$(LIB_DIR) -Wl,--start-group,$(LIBS),--end-group
+ifneq ($(BUILD_FOR_SIMULATOR),)
+LD_FLAGS    := -Wl,-L$(SEMIHOSTING_PATH) -specs=rdimon.specs $(LD_FLAGS)
+LD_LIBS     := -Wl,-lrdimon $(LD_LIBS) -Wl,--defsym=end=_end
+LD 			:= arm-none-eabi-gcc
+# comes from package `libnewlib-arm-none-eabi`
+endif
 
 $(BUILD_DIR)/$(TARGET).elf: $(BSP_LIB) $(BUILD_DIR)/$(TARGET).o | $(BUILD_DIR)/$(NEW_LINK_F)
 	@echo -e $(COLOR_MAGENTA)linking with libraries $(NO_COLOR)
-	@echo -e '  'flags = $(LD_FLAGS)
+	@echo -e '  'flags = $(LD_FLAGS) $(XLFLAGS)
 	@echo -e '  'libs = $(LD_LIBS)
-	@$(LD) -g $(LD_FLAGS) $(BUILD_DIR)/$(TARGET).o -o $@ $(LD_LIBS)
+	@$(LD) -g $(LD_FLAGS) $(XLFLAGS) $(BUILD_DIR)/$(TARGET).o -o $@ $(LD_LIBS)
 
 $(BUILD_DIR)/$(TARGET)_%.elf: $(BUILD_DIR)/$(TARGET)_%.o $(BSP_LIB) | $(BUILD_DIR)/$(NEW_LINK_F)
 	@echo -e $(COLOR_MAGENTA)linking with libraries $(NO_COLOR)
@@ -208,6 +227,32 @@ $(foreach dir,$(PROJECT_SRC),$(eval $(call bc_file_compile,$(dir))))
 
 
 ################################################################################
+# Rules for running the executable with QEMU                                   #
+################################################################################
+
+.PHONY: qemu qemu-cache print-qemu
+
+SEMIHOST_FLAGS  := -semihosting --semihosting-config enable=on,target=native
+QEMU_DISP_FLAGS := -nographic -serial mon:stdio
+QEMU_MACH_FLAGS := -machine xilinx-zynq-a9 -m 512M -cpu cortex-a9
+QEMU_ALL_FLAGS  := $(SEMIHOST_FLAGS) $(QEMU_DISP_FLAGS) $(QEMU_MACH_FLAGS)
+QEMU_DBG_FLAGS  := -gdb tcp::12345 -S
+
+qemu:
+	@$(QEMU_INSTALL_DIR)/qemu-system-arm $(QEMU_ALL_FLAGS) -kernel $(BUILD_DIR)/$(TARGET).elf
+
+qemu-dbg:
+	@$(QEMU_INSTALL_DIR)/qemu-system-arm $(QEMU_ALL_FLAGS) $(QEMU_DBG_FLAGS) -kernel $(BUILD_DIR)/$(TARGET).elf
+
+# TODO: plugin args
+qemu-cache:
+	$(QEMU_INSTALL_DIR)/qemu-system-arm $(QEMU_ALL_FLAGS) -kernel $(BUILD_DIR)/$(TARGET).elf -plugin $(QEMU_PLUGIN_DIR)/libcache.so,arg=0x100000,arg=0x105D30,arg=10000,arg=2,arg=1,arg=48,arg=icache -d plugin
+
+print-qemu:
+	@echo $(QEMU_INSTALL_DIR)
+
+
+################################################################################
 # Rules for building the BSP		                                           #
 ################################################################################
 
@@ -216,18 +261,16 @@ $(foreach dir,$(PROJECT_SRC),$(eval $(call bc_file_compile,$(dir))))
 BSP_DIRS	:= $(shell find ${BSP_DIR}/ps7_cortexa9_0/libsrc/*/src/ -type d -print)
 # all the dirs with source files for compiling BSP
 BSP_SRCS	:= $(filter %/src/,$(BSP_DIRS))
-BSP_FRTOS_SRC := $(filter %/freertos10_xilinx_v1_1/src/,$(BSP_SRCS))
-BSP_STALN_SRC := $(filter %/standalone_v6_7/src/,$(BSP_SRCS))
 
 # debug
 # BSP_SRCS 	:= $(word 1, $(BSP_SRCS))
-BSP_LIBX_NAME	:= libxil.a
+BSP_LIBX_NAME	?= libxil.a
 BSP_SFLAGS		:= "SHELL=/bin/sh"
 BSP_BUILD		:= "BUILD_DIR=$(abspath $(BUILD_DIR))"
 BSP_LEVEL		:= "LEVEL=$(abspath $(LEVEL))"
 BSP_LIB			:= $(BSP_DIR)/$(BSP_LIBX_NAME)
 BSP_LIB_PATH	:= "LIB=$(abspath $(BSP_LIB))"
-BSP_MAKE		:= $(CURDIR)/makefile.bspsrc
+BSP_MAKE		?= $(CURDIR)/makefile.bspsrc
 BSP_ADD_DEF		:= "XDEFS=$(BSP_XDEFS)"
 BSP_ALL_FLAGS	:= $(BSP_SFLAGS) $(BSP_LEVEL) $(BSP_BUILD) $(BSP_ADD_DEF) $(BSP_LIB_PATH)
 
@@ -255,6 +298,13 @@ define bsp_lib_clean =
 
 endef
 
+# debug printing in each
+define bsp_lib_test_print = 
+@make -C $(1) --file=$(BSP_MAKE) --no-print-directory -s test_print $(BSP_ALL_FLAGS) -j4 2>&1 | sed '/: warning: /d'
+
+endef
+
+
 bsp_lib:
 	@echo -e $(COLOR_YELLOW)compiling bsp $(NO_COLOR)
 	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_comp,$(abspath $(dir))))
@@ -262,6 +312,9 @@ bsp_lib:
 bsp_include:
 	@echo -e $(COLOR_YELLOW)including bsp $(NO_COLOR)
 	$(foreach dir,$(BSP_SRCS),$(call bsp_inc_comp,$(dir)))
+
+bsp_test_print:
+	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_test_print,$(dir)))
 
 bsp: $(BSP_LIB)
 
@@ -291,6 +344,9 @@ clean_lib:
 clean_bsp:
 	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_clean, $(dir)))
 
+clean_bsp_tiny:
+	@rm -f $(BUILD_DIR)/boot.o $(BUILD_DIR)/xscugic_selftest.bc $(BUILD_DIR)/xil-crt0.o $(BUILD_DIR)/xuartps_hw.bc
+
 clean_opt:
 	@rm -f $(BUILD_DIR)/$(TARGET).opt.bc
 
@@ -298,10 +354,10 @@ print:
 	@echo $(CURDIR)
 	@echo $(PROJECT_SRC)
 	@echo $(CSRCS)
+	@echo $(LIB_DIR)
 
 print_bsp:
 	@echo $(BSP_SRCS)
 	@echo $(words $(BSP_SRCS))
-	@echo $(BSP_FRTOS_SRC)
 	@echo $(BSP_LIB)
 	@echo $(BSP_ADD_DEF)

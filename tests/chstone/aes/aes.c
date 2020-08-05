@@ -29,8 +29,8 @@
  * And if you want to contact us, send an email to Kimitake Wakayama
  * (wakayama@elcom.nitech.ac.jp)
  *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
@@ -42,12 +42,14 @@
  * 3. All advertising materials mentioning features or use of this software must
  *    display the following acknowledgment:
  *    "This product includes software developed by Akira Iwata Laboratory,
- *    Nagoya Institute of Technology in Japan (http://mars.elcom.nitech.ac.jp/)."
+ *    Nagoya Institute of Technology in Japan
+ * (http://mars.elcom.nitech.ac.jp/)."
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
  *    "This product includes software developed by Akira Iwata Laboratory,
- *     Nagoya Institute of Technology in Japan (http://mars.elcom.nitech.ac.jp/)."
+ *     Nagoya Institute of Technology in Japan
+ * (http://mars.elcom.nitech.ac.jp/)."
  *
  *   THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT EXPRESS OR IMPLIED WARRANTY.
  *   AKIRA IWATA LABORATORY DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
@@ -61,14 +63,10 @@
  */
 #include <stdio.h>
 
-
 int main_result;
 
-//To meet fiji testing standard:
-__attribute__((noinline))
-void generateGolden(){
-    ;
-}
+// To meet fiji testing standard:
+__attribute__((noinline)) void generateGolden() { ; }
 int golden;
 
 #include "aes.h"
@@ -84,17 +82,14 @@ int key[32];
 int statemt[32];
 int word[4][120];
 
-
 /* ***************** main **************************** */
-int
-aes_main (void)
-{
-/*
-+--------------------------------------------------------------------------+
-| * Test Vectors (added for CHStone)                                       |
-|     statemt, key : input data                                            |
-+--------------------------------------------------------------------------+
-*/
+int aes_main(void) {
+  /*
+  +--------------------------------------------------------------------------+
+  | * Test Vectors (added for CHStone)                                       |
+  |     statemt, key : input data                                            |
+  +--------------------------------------------------------------------------+
+  */
   statemt[0] = 50;
   statemt[1] = 67;
   statemt[2] = 246;
@@ -129,18 +124,21 @@ aes_main (void)
   key[14] = 79;
   key[15] = 60;
 
-  encrypt (statemt, key, 128128);
-  decrypt (statemt, key, 128128);
+  encrypt(statemt, key, 128128);
+  decrypt(statemt, key, 128128);
   return 0;
 }
 
-int
-main ()
-{
-      main_result = 0;
-      generateGolden();
+int main() {
+  main_result = 0;
+  generateGolden();
 
-      aes_main ();
-      printf ("\n%d\n", main_result);
-      return main_result;
-    }
+  aes_main();
+  if (main_result == 0) {
+    printf("RESULT: PASS\n");
+    return 0;
+  } else {
+    printf("RESULT: FAIL\n");
+    return 1;
+  }
+}

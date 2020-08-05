@@ -14,24 +14,26 @@ COAST
 
     setup
     make_system
-    eclipse
     passes
+    repl_scope
     troubleshooting
-    cfcss
     release_notes
+    eclipse
+    cfcss
+
 
 Folder guide
 ==============
 
+boards
+---------
+
+This folder has support files needed for the various target architectures we have used in testing COAST.
+
 build
 ---------
 
-This folder contains instructions on how to build LLVM, and when built will contain the binaries needed to compile source code.
-
-llvm
----------
-
-The source code for LLVM and associated tools.
+This folder contains instructions on how to build LLVM, and when built will contain the binaries needed to compile source code.  Note: building LLVM from source is optional.
 
 projects
 ---------
@@ -42,6 +44,7 @@ tests
 ---------
 
 Benchmarks we use to validate the correct operation of COAST.
+
 
 Results
 ========

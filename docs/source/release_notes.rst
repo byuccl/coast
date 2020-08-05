@@ -4,14 +4,58 @@ Release Notes
 **************
 
 
-November 2019
-==============
+v1.4 - August 2020
+=====================
+
+Features
+---------
+
+- Support for cloning function return values
+
+- New unit tests
+
+- Better copying of debug info
+
+- Experimental stack protection
+
+- | 7 new command line arguments
+  | See :ref:`coast_cli_params` for more information.
+
+
+Directives
+------------
+
+7 new directives
+
+- ``__ISR_FUNC``
+- ``__xMR_RET_VAL``
+- ``__xMR_PROT_LIB``
+- ``__xMR_ALL_AFTER_CALL``
+- ``__xMR_AFTER_CALL``
+- ``__NO_xMR_ARG``
+- ``__COAST_NO_INLINE``
+
+See :ref:`in_code_directives` for more information.
+
+
+Bug Fixes
+-------------
+
+- Correct support for variadic functions
+- Fix up debug info for global variables so it works better with GDB
+- Better removal of unused functions
+- Official way of marking ISR functions instead of function name text matching
+
+
+
+v1.3 - November 2019
+=====================
 
 Changed the source of the LLVM project files from SVN (`deprecated <https://llvm.org/docs/Proposals/GitHubMove.html>`_) to the Git mono-repo, `version 7.1.0 <https://github.com/llvm/llvm-project/tree/llvmorg-7.1.0>`_.
 
 
-October 2019
-==============
+v1.2 - October 2019
+====================
 
 
 Features

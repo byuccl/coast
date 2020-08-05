@@ -10,7 +10,7 @@
 #include "../../COAST.h"
 
 
-int simpleMath(int x, int y) {
+int simpleMath(int x, int y) __xMR_FN_CALL {
     return x + y;
 }
 
@@ -23,7 +23,9 @@ int main() {
 
     if (result != 30) {
         printf("Error! %d\n", result);
+        return -1;
     } else {
         printf("Success!\n");
+        return 0;
     }
 }

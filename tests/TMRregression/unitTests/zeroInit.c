@@ -1,4 +1,11 @@
-//Pulled these constants from the support includes for the AES test
+/*
+ * zeroInit.c
+ *
+ * This unit test was created to make sure that COAST correctly supports the
+ *  `zeroinitializer` LLVM IR command.
+ *
+ * Pulled these constants from the support includes for the AES test
+ */
 
 #include <stdio.h>
 
@@ -28,13 +35,13 @@ int main() {
 		acc1 += zeroStartArray[i];
 	}
 
-	printf("Calculated: %d, %d\n", acc1, acc2);
-	printf("  Expected: %d, %d\n", 4240, 4220);
-
-	//check
+	// check
 	if ( (acc1 == 4240) && (acc2 == 4220) ) {
+		printf("Success!\n");
 		return 0;
 	} else {
+		printf("Calculated: %d, %d\n", acc1, acc2);
+		printf("  Expected: %d, %d\n", 4240, 4220);
 		return -1;
 	}
 }

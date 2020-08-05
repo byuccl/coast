@@ -14,6 +14,7 @@ Description
 - **DWC**\ : This pass implements duplication with compare (DWC) as a form of data flow protection. DWC is also known as dual modular redundancy (DMR). It is based on EDDI [#f2]_. Behind the scenes, this pass simply calls the dataflowProtection pass with the proper arguments.
 - **exitMarker**\ : For software fault injection we found it helpful to have known breakpoints at the different places that ``main()`` can return. This pass places a function call to a dummy function, ``EXIT MARKER``, immediately before these return statements. Breakpoints placed at this function allow debuggers to access the final processor state.
 - **TMR**\ : This pass implements triple modular redundancy (TMR) as a form of data flow protection. It is based on SWIFT-R [#f3]_ and Trikaya [#f4]_. Behind the scenes, this pass simply calls the dataflowProtection pass with the proper arguments.
+- **smallProfile**\ : This pass can be used to collect dynamic function call counts.
 
 Configuration Options
 ======================
@@ -27,6 +28,8 @@ Command Line Parameters
 -------------------------
 
 These options are only applicable to the ``-DWC`` and ``-TMR`` passes.
+
+The details for each of these options can be found in the :ref:`repl_details` section.
 
 .. table::
     :widths: 25 40
@@ -94,6 +97,40 @@ These options are only applicable to the ``-DWC`` and ``-TMR`` passes.
 Note: Replication rules defined by Chielle et al. [#f5]_\ .
 
 
+.. versionadded:: 1.4
+
+.. table::
+    :widths: 25 40
+
+    +-------------------------+-------------------------------------------+
+    |  ``-isrFunctions=<X>``  | <X> is a comma separated list of the      |
+    |                         | function names that should be treated     |
+    |                         | as Interrupt Service Routines (ISRs).     |
+    +-------------------------+-------------------------------------------+
+    |   ``-cloneReturn=<X>``  | <X> is a comma separated list of the      |
+    |                         | function names that should have their     |
+    |                         | return values cloned.                     |
+    +-------------------------+-------------------------------------------+
+    | ``-cloneAfterCall=<X>`` | <X> is a comma separated list of the      |
+    |                         | function names that will have their       |
+    |                         | arguments cloned after the call.          |
+    +-------------------------+-------------------------------------------+
+    | ``-protectedLibFn=<X>`` | <X> is a comma separated list of the      |
+    |                         | function names that should be protected   |
+    |                         | without having their signatures changed.  |
+    +-------------------------+-------------------------------------------+
+    |     ``-countSyncs``     | Instructs COAST to keep track of the      |
+    |                         | dynamic number of synchronization checks. |
+    |                         | Requires ``-countErrors``.                |
+    +-------------------------+-------------------------------------------+
+    |    ``-protectStack``    | Enable experimental stack protection.     |
+    +-------------------------+-------------------------------------------+
+    |   ``-noCloneOpsCheck``  | Disable exiting on failure of check       |
+    |                         | ``verifyCloningSuccess``.                 |
+    +-------------------------+-------------------------------------------+
+
+
+
 .. _in_code_directives:
 
 In-code Directives
@@ -131,7 +168,7 @@ In-code Directives
     |                      | instead of modifying the function body.               |
     +----------------------+-------------------------------------------------------+
 
-.. versionadded:: Oct2019
+.. versionadded:: 1.2
 
 .. table::
     :widths: 25 40
@@ -171,6 +208,42 @@ In-code Directives
     | ``GENERIC_COAST_WRAPPER(fname)``   | replicate calls to.  Used in both declaring and |
     |                                    | calling the function.                           |
     +------------------------------------+-------------------------------------------------+
+
+.. versionadded:: 1.4
+
+.. table::
+    :widths: 25 40
+
+    +--------------------------------+---------------------------------------+
+    |         ``__ISR_FUNC``         | Used to mark functions that should be |
+    |                                | treated as Interrupt Service Routines |
+    |                                | (ISRs).                               |
+    +--------------------------------+---------------------------------------+
+    |        ``__xMR_RET_VAL``       | Used to mark functions that should    |
+    |                                | have their return values cloned.      |
+    +--------------------------------+---------------------------------------+
+    |       ``__xMR_PROT_LIB``       | Used to mark functions that should    |
+    |                                | be protected without having their     |
+    |                                | signatures changed.                   |
+    +--------------------------------+---------------------------------------+
+    |    ``__xMR_ALL_AFTER_CALL``    | Used to mark functions that should    |
+    |                                | have their arguments cloned after     |
+    |                                | the call.                             |
+    +--------------------------------+---------------------------------------+
+    | ``__xMR_AFTER_CALL(fname, x)`` | Specific version of the above macro.  |
+    |                                | Specifiy the arg numbers as           |
+    |                                | ``(name, 1_2_3)``.                    |
+    |                                | Must be registered, similar to        |
+    |                                | ``GENERIC_COAST_WRAPPER(fname)``      |
+    +--------------------------------+---------------------------------------+
+    |      ``__NO_xMR_ARG(num)``     | The argument [num] should not be      |
+    |                                | replicated. If multiple arguments     |
+    |                                | need to be marked, this directive     |
+    |                                | should be placed on the function      |
+    |                                | multiple times.                       |
+    +--------------------------------+---------------------------------------+
+    |      ``__COAST_NO_INLINE``     | Convenience for no-inlining functions |
+    +--------------------------------+---------------------------------------+
 
 
 See the file COAST.h_
@@ -227,8 +300,17 @@ When to use replication command line options
       - Library
       - ``-skipLibCalls=<X>``
       - Whenever the call should not be repeated, such as calls interfacing with I/O.
+    * - Protect without changing signature
+      - User
+      - ``-protectedLibFn=<X>``
+      - Library functions you have the source code for.
+    * -
+      - Library
+      - N/A
+      - Can't protect it if you don't have the source code.
 
 
+.. _repl_details:
 
 Details
 =========
@@ -242,7 +324,7 @@ The first option, ``-noMemReplication``, should be used whenever memory has a se
 
 The option ``-noStoreAddrSync`` corresponds to C5. In EDDI, memory was simply duplicated and each duplicate was offset from the original value by a constant. However, COAST runs before the linker, and thus has no notion of an address space. We implement rules C3 and C5, checking addresses before stores and loads, for data structures such as arrays and structs that have an offset from a base address. These offsets, instead of the base addresses, are compared in the synchronization logic.
 
-.. versionchanged:: Oct2019
+.. versionchanged:: 1.2
 
 As of the October 2019 release, COAST no longer syncs before storing data.  Test data indicated that, in many cases, the number of synchronization points generated by this rule limited the effective protection that the replication of variables afforded.  This behavior can be overridden using the ``-storeDataSync`` flag.
 
@@ -253,9 +335,28 @@ Replication Scope
 
 The user can specify any functions and global variables that should not be protected using ``-ignoreFns`` and ``-ignoreGlbls``. At minimum, these options should be used to exclude code that interacts with hardware devices (GPIO, UART) from the SoR. Replicating this code is likely to lead to errors. The option ``-replicateFnCalls`` causes user functions to be called in a coarse grained way, meaning the call is replicated instead of fine-grained instruction replication within the function body. Library function calls can also be excluded from replication via the flag ``-skipLibCalls``, which causes those calls to only be executed once. These two options should be used when multiple independent copies of a return value should be generated, instead of a single return value propagating through all replicated instructions. Changing the scope of replication can cause problems across function calls.
 
-.. versionadded:: Oct2019
+.. versionadded:: 1.2
 
-Before processing the IR code, COAST begins by checking to make sure the replication scope rules it was given are consistent.  It checks to make sure all cloned globals are only used in functions that are also protected.  If they are not, the compilation will fail, with an error message informating the user which global is used in which function.  The user has the option to ignore these checks if they feel that it is safe.  This is done using the ``__COAST_IGNORE_GLOBAL`` macro mentioned above.
+Before processing the IR code, COAST begins by checking to make sure the replication scope rules it was given are consistent.  It checks to make sure all cloned globals are only used in functions that are also protected.  If they are not, the compilation will fail, with an error message informing the user which global is used in which function.  The user has the option to ignore these checks if they feel that it is safe.  This is done using the ``__COAST_IGNORE_GLOBAL`` macro mentioned above.
+
+.. versionadded:: 1.4
+
+There are also some options that have been added that allow more fine-grained control over how different functions and values are protected.  The first of these is the command line argument ``-cloneReturn``, or directive ``__xMR_RET_VAL``.  This instructs COAST that the return value of the function should be cloned.  This has been implemented by adding extra arguments to the end of the parameter list that are pointer types of the normal return value.  This prevents the values from passing through a bottleneck.  This is particulary useful for functions that return addresses to memory spaces that have been dynamically allocated.
+
+Another recently added option is the ability to mark functions as "protected library functions" (``-protectedLibFn=<X>``, ``__xMR_PROT_LIB``).  The idea behind this is that there are some functions that should not have their signatures changed, but should still have their bodies protected.
+
+Another interesting feature added in this version is the ability to copy the value of the original variable into its clone(s) *after* the function call has been completed.  An example of when this might be useful is the function `sscanf <http://www.cplusplus.com/reference/cstdio/sscanf/>`_.  This function will read values from a string based on a format specifier and put the values into the pointers provided.
+
+.. code-block:: c
+
+  sscanf (sentence,"%s %*s %d",str,&i);
+
+This will allow the copies of the variables to stay in sync with each other even when calling a library function that can only be called once, that modifies a variable by reference.
+
+We have introduced a way to mark functions as Interrupt Service Routines (ISRs), which means they will not be changed in any way, nor removed if they don't appear to have any uses.
+
+COAST now has much better support for changing the protection of variables that are local to protected functions.  They can be excluded from the Scope of Replication using the macro ``__NO_xMR``.  Even function arguments can be excluded using the macro ``__NO_xMR_ARG(num)``.
+
 
 Other Options
 ----------------
@@ -295,7 +396,7 @@ Debug Statements
 
 By default, the Debug Statements pass will add code to the beginning of every basic block that prints out the function name followed by the name of the basic block.  For example, you would expect the first message to be ``main->entry``.  This can produce 100s of MegaBytes of data, so it is important to redirect this output to a file, as shown in the example above.  This verbose output represents a complete call graph of the execution, although trawling through all of this data can be quite difficult.
 
-.. versionadded:: Oct2019
+.. versionadded:: 1.2
 
 There is an option to only add print statements to certain functions.  Pass ``-fnPrintList=`` with a comma-separated list of function names that will be instrumented with the print statements.  This will allow examining smaller parts of the execution at a time.
 
@@ -303,7 +404,7 @@ There is an option to only add print statements to certain functions.  Pass ``-f
 Small Profiler
 -----------------
 
-.. versionadded:: Oct2019
+.. versionadded:: 1.2
 
 The Small Profiler is a pass which simply counts the number of calls to each function in the module.  It creates global variables that correspond to each function in the module.  Each time a function is called, the corresponding global variable is incremented.  The pass adds a call to a function named ``PRINT_PROFILE_STATS`` immediately before the ``main`` function exits.  If the program does not terminate, calls to this function may be inserted manually by the programmer.
 

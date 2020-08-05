@@ -7,6 +7,10 @@
  * examples for the various functions
  *
  * make sure to add clock() to -skipLibCalls
+ *
+ * This is also a good example of functions that can only be called once,
+ *  but we still want to have multiple copies of the variables.
+ * So `time` needs to be marked with `cloneAfterCall`.
  */
 
 #include <stdio.h>
@@ -25,14 +29,14 @@ int main() {
     timeInfo = localtime(&rawTime);
     printf ( "Using localtime and asctime: %s", asctime (timeInfo) );
 
-    //set the time to the beginning of the day
+    // set the time to the beginning of the day
     timeInfo->tm_hour = 0; timeInfo->tm_min = 0; timeInfo->tm_sec = 0;
     double seconds = difftime(rawTime, mktime(timeInfo));
 
     printf("Using difftime and mktime: ");
     printf("%f seconds since today started\n",seconds);
 
-    //gmtime and strftime
+    // gmtime and strftime
     struct tm * ptm;
     ptm = gmtime(&rawTime);
     char buffer [80];
@@ -46,5 +50,6 @@ int main() {
     printf("Using clock: %ld clicks to run (%f seconds)\n", dur, ((float)dur)/CLOCKS_PER_SEC);
 
     return 0;
-    //is there a good way to make this unit test self-checking?
+    // TODO: is there a good way to make this unit test self-checking?
+    // For now, there is a regex in unitTestDriver.py that will check the output
 }

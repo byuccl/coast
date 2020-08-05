@@ -17,8 +17,10 @@ CORE_INC 	:= $(BOARD_SW)/psu_coretexa53_0/include
 
 ################################################################################
 # Flags
+USER_INCS   ?=
+NEW_INCS	:= $(addprefix -I,$(USER_INCS))
 LIB_INCS	:= -I"$(TOOLCHAIN)/lib/gcc/$(TRIPLE)/$(GCC_VERSION)/include/" -I"$(TOOLCHAIN)/lib/gcc/$(TRIPLE)/$(GCC_VERSION)/include-fixed/" -I"$(TOOLCHAIN)/include/" -I"$(TOOLCHAIN)/$(TRIPLE)/libc/usr/include/"
-SRC_INCS	:= -nostdinc -I$(CORE_INC) $(LIB_INCS)
+SRC_INCS	:= -nostdinc -I$(CORE_INC) $(LIB_INCS) $(NEW_INCS)
 LIB_DIR		:= $(BSP_DIR)
 LIBS		:= -lxil,-lgcc,-lc
 
@@ -159,7 +161,7 @@ $(BUILD_DIR)/$(TARGET)_3_linked.bc: $(patsubst %.c,$(BUILD_DIR)/%.bc.3,$(notdir 
 # Rules for .bc compilation			                                           #
 ################################################################################
 
-$(BUILD_DIR)/%.bc: $(PROJECT_SRC)/%.c $(MAKEFILES) | $(BUILD_DIR)/
+$(BUILD_DIR)/%.bc: $(PROJECT_SRC)/%.c | $(BUILD_DIR)/
 	@echo -e $(COLOR_BLUE)building $(notdir $@)$(NO_COLOR)
 	@echo -e '  'flags  = $(CLANG_FLAGS)
 	@$(CLANG) -emit-llvm $(CLANG_FLAGS) $(SRC_INCS) $< -c -o $@

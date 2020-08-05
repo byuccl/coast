@@ -1,0 +1,11 @@
+drivers:
+  - path: tests/TMRregression/unitTestDriver.py
+    re: "Success!"
+
+  - path: unittest/llvm-stress.py
+    re: "Success!"
+
+OPT_PASSES:
+  - ""
+  - " -DWC"
+  - " -TMR"

@@ -1,0 +1,36 @@
+benchmarks:
+  - path: matrixMultiply
+    re: "Number of errors: 0"
+  
+  - path: chstone
+    re: "RESULT: PASS"
+  
+  - path: crazyCF
+  
+  - path: crc16
+
+  - path: aes
+
+  - path: cache_test
+
+  # - path: TMRregression
+
+OPT_PASSES:
+  - ""
+  - "-DWC"
+  - "-TMR"   
+  - "-TMR -countErrors"
+  - "-DWC -noMemReplication"
+  - "-TMR -noMemReplication"
+  - "-DWC -noLoadSync"
+  - "-TMR -noLoadSync"
+  - "-DWC -noStoreDataSync"
+  - "-TMR -noStoreDataSync"
+  - "-DWC -noStoreAddrSync"
+  - "-TMR -noStoreAddrSync"
+  - "-DWC -noMemReplication -noLoadSync"
+  - "-TMR -noMemReplication -noLoadSync"
+  - "-DWC -noMemReplication -noStoreDataSync"
+  - "-TMR -noMemReplication -noStoreDataSync"
+  - "-DWC -noMemReplication -noStoreAddrSync"
+  - "-TMR -noMemReplication -noStoreAddrSync"

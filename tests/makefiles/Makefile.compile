@@ -1,13 +1,13 @@
 LLVM_BIN = $(LLVM_BUILD_DIR)/bin
 
-CLANG 		:= $(LLVM_BIN)/clang
-CLANG++ 	:= $(LLVM_BIN)/clang++
-LLVM_DIS 	:= $(LLVM_BIN)/llvm-dis
-LLVM_OPT 	:= $(LLVM_BIN)/opt
-LLVM_LLI 	:= $(LLVM_BIN)/lli
-LLVM_LLC 	:= $(LLVM_BIN)/llc
-LLVM_LINK	:= $(LLVM_BIN)/llvm-link
-LLVM_MC	  	:= $(LLVM_BIN)/llvm-mc
+CLANG 		:= clang-7
+CLANG++ 	:= clang++-7
+LLVM_DIS 	:= llvm-dis-7
+LLVM_OPT 	:= opt-7
+LLVM_LLI 	:= lli-7
+LLVM_LLC 	:= llc-7
+LLVM_LINK	:= llvm-link-7
+LLVM_MC	  	:= llvm-mc-7
 
 PROJECT_BUILD_DIR = $(COAST_ROOT)/projects/build/
 rwildcard=$(wildcard $1$2)$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
@@ -33,6 +33,10 @@ include $(LEVEL)/makefiles/Makefile.compile.llvmLLI
 else ifeq ($(BOARD), $(BOARD_PYNQ))
 
 include $(LEVEL)/makefiles/Makefile.compile.pynq
+
+else ifeq ($(BOARD), $(BOARD_PYNQ_RTOS))
+
+include $(LEVEL)/makefiles/Makefile.compile.pynqrtos
 
 else ifeq ($(BOARD), $(BOARD_ULTRA96))
 
