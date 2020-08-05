@@ -6,5 +6,8 @@ add_llvm_loadable_module(DataflowProtection
 	cloning.cpp
 	synchronization.cpp
 	utils.cpp
+    verification.cpp
+    interface.cpp
+    inspection.cpp
 	dataflowProtection.h
 )
