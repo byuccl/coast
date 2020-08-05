@@ -1,0 +1,7 @@
+benchmarks:
+  - path: matrixMultiply
+
+OPT_PASSES:
+  - ""
+  - "-DWC"
+  - "-TMR"

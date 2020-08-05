@@ -1,0 +1,16 @@
+# level is one more than normal because we intend to use it in one directory down
+LEVEL = ../../tests
+TARGET ?=
+OPT_PASSES ?=
+OPT_FLAGS ?=
+
+BOARD=x86
+
+# this is for compatibility with building for ARM QEMU
+ifneq ($(BUILD_FOR_SIMULATOR),)
+USER_DEFS	+= __FOR_SIM=1 __QEMU_SIM=1
+USER_CFLAGS += -g3
+INC_DIRS    := $(LEVEL)/../simulation
+endif
+
+include $(LEVEL)/makefiles/Makefile.common

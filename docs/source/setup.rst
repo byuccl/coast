@@ -55,7 +55,9 @@ If the other two options do not work for your system, or if you prefer to have a
 
 .. code-block:: bash
 
-    cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=On ../llvm/
+    cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=On ../llvm-project/llvm/
+
+To enable support for RISCV targets, add ``-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=RISCV`` to the ``cmake`` invocation.
 
 See the ``README.md`` in the "build" folder for more information on how to further configure LLVM.
 

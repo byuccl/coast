@@ -1,0 +1,41 @@
+language: c
+os: linux
+
+dist: bionic
+addons:
+  apt:
+    packages:
+      - clang-7
+      - llvm-7
+      - libc++-dev
+      - libc++abi-dev
+      - gcc-arm-none-eabi
+      - libnewlib-arm-none-eabi
+
+git:
+  submodules: false
+
+jobs:
+  include:
+    - stage: build
+      name: build
+      script:
+        - .github/.travis/build.sh
+
+    - stage: test
+      name: test_fast
+      script:
+        - .github/.travis/build.sh
+        - make test_fast
+
+    - stage: test
+      name: test_full
+      script:
+        - .github/.travis/build.sh
+        - make test_full
+    
+    - stage: test
+      name: regression_test
+      script:
+        - .github/.travis/build.sh
+        - make test_regression
