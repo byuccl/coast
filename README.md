@@ -1,5 +1,9 @@
 # Welcome to the COAST Repository
 
+[![Build Status](https://travis-ci.com/byuccl/coast.svg?branch=master)](https://travis-ci.com/byuccl/coast)
+[![Documentation Status](https://readthedocs.org/projects/coast-compiler/badge/?version=latest)](https://coast-compiler.readthedocs.io/en/latest/?badge=latest)
+
+
 Welcome to the repository for COAST (COmpiler-Assisted Software fault Tolerance), BYU's tool for automated software mitigation! To get started, please refer to our [documentation pages](https://coast-compiler.readthedocs.io/en/latest/).
 
 
