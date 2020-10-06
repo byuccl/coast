@@ -15,4 +15,8 @@ test_full:
 test_regression:
 	python3 unittest/pyDriver.py unittest/cfg/regression.yml
 
+# ensures that all RTOS benchmarks compile and run correctly
+test_rtos:
+	./unittest/rtos_test.sh
+
 .PHONY: build

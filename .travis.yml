@@ -9,6 +9,7 @@ addons:
       - llvm-7
       - libc++-dev
       - libc++abi-dev
+      - qemu-system-arm
       - gcc-arm-none-eabi
       - libnewlib-arm-none-eabi
 
@@ -39,3 +40,9 @@ jobs:
       script:
         - .github/.travis/build.sh
         - make test_regression
+
+    - stage: test
+      name: test_rtos
+      script:
+        - .github/.travis/build.sh
+        - make test_rtos

@@ -25,12 +25,3 @@ make TARGET=rtos_mm.xMR $cmd
 
 echo ----------------------------- building rtos_mm.app.xMR -----------------------------
 make TARGET=rtos_mm.app.xMR $cmd
-
-echo ---------------------------- building rtos_fat_demo ----------------------------
-make TARGET=rtos_fat_demo $cmd
-
-echo -------------------------- building rtos_fat_demo.xMR --------------------------
-make TARGET=rtos_fat_demo.xMR $cmd
-
-echo -------------------------- building rtos_fat_demo.app.xMR --------------------------
-make TARGET=rtos_fat_demo.app.xMR $cmd
