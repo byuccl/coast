@@ -20,6 +20,8 @@ COAST
     release_notes
     eclipse
     cfcss
+    tests
+    fault_injection
 
 
 Folder guide
