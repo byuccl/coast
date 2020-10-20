@@ -42,10 +42,21 @@ projects
 
 The passes that we have developed as part of COAST.
 
+rtos
+---------
+
+Example applications for FreeRTOS and how to use it with COAST.
+
+simulation
+-----------
+
+Files for running fault injection campaigns.
+
 tests
 ---------
 
 Benchmarks we use to validate the correct operation of COAST.
+
 
 
 Results
@@ -59,6 +70,8 @@ See the results of fault injection and radiation beam testing
 
     results/*
 
+.. Add more results?
+
 
 Additional Resources
 =====================
@@ -67,6 +80,10 @@ Additional Resources
 
 - IEEE Transactions on Nuclear Science, Vol. 66 Issue 1 - `Microcontroller Compiler-Assisted Software Fault Tolerance`_
 
+- IEEE Transactions on Nuclear Science, Vol. 67 Issue 1 - `Applying Compiler-Automated Software Fault Tolerance to Multiple Processor Platforms`_
+
 .. _Master's thesis: https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7724&context=etd
 
 .. _Microcontroller Compiler-Assisted Software Fault Tolerance: https://ieeexplore.ieee.org/document/8571250
+
+.. _Applying Compiler-Automated Software Fault Tolerance to Multiple Processor Platforms: https://ieeexplore.ieee.org/document/8933038

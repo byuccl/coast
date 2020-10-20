@@ -14,13 +14,13 @@ See [the build folder](build/README.md) for instructions on installation and dep
 
 ## Cloning
 
-If you plan to build LLVM from source, use the following commands to clone this repository:
+If you plan to use our fault injection manager, use the following commands to clone this repository:
 
 ```
 git clone --recursive -j2 git@github.com:byuccl/coast-private.git
 ```
 
-This makes sure that the LLVM submodule repository is also cloned.  If you forget this, go to `coast/llvm-project` and execute
+This makes sure that the QEMU submodule repository is also cloned.  If you forget this, go to `coast/simulation/qemu-byu-ccl` and execute
 
 ```
 git submodule init
