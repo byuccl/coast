@@ -1,0 +1,474 @@
+################################################################################
+# Checking
+ifeq ($(KERNEL_DIRS),)
+	@echo "No kernel source directories specified"
+	@exit 2
+endif
+
+################################################################################
+# Sources
+PROJECT_SRC := ${CURDIR} $(SRC_DIRS)
+CSRCS 		:= $(foreach dir,$(PROJECT_SRC),$(wildcard $(dir)/*.c))
+BUILD_DIR	?= ./build
+INC_DIRS	?=
+BC_FILES	:= $(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(CSRCS)))
+# build stuff for the RTOS kernel
+KCSRCS		:= $(foreach dir,$(KERNEL_DIRS),$(wildcard $(dir)/*.c))
+ASMSRCS		:= $(foreach dir,$(KERNEL_DIRS),$(wildcard $(dir)/*.S))
+XTRA_OBJS   := $(patsubst %.S,$(BUILD_DIR)/%.o,$(notdir $(ASMSRCS)))
+KDIR_NAMES	:= $(foreach dir,$(KERNEL_DIRS),$(shell basename $(shell dirname $(dir))))
+KOBJS		:= $(addsuffix .opt.bc,$(KDIR_NAMES))
+KOBJS		:= $(addprefix $(BUILD_DIR)/,$(KOBJS))
+
+################################################################################
+# dependencies
+SDK_TRIPLE	:= $(XILINX_SDK)/gnu/aarch32/lin/gcc-arm-none-eabi
+LNK_SCRIPT	:= $(BOARD_DIR)/sw/lscript.ld
+SPEC_SRC 	:= $(BOARD_DIR)/sw/Xilinx.spec
+BSP_DIR 	?= $(BOARD_DIR)/sw
+BSP_INC 	:= $(BSP_DIR)/include
+ASM_CMPLR	:= $(SDK_TRIPLE)/bin/arm-none-eabi-gcc
+
+################################################################################
+# Flags
+LIB_INCS	:= -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include/"  -I"$(SDK_TRIPLE)/lib/gcc/arm-none-eabi/7.2.1/include-fixed/" -I"$(SDK_TRIPLE)/arm-none-eabi/include/" -I"$(SDK_TRIPLE)/arm-none-eabi/libc/usr/include/"
+# if we don't have the Xilinx SDK installed, then use the Ubuntu package
+OTHER_INCS	:= -I"/usr/lib/gcc/arm-none-eabi/6.3.1/include" -I"/usr/lib/arm-none-eabi/include"
+NEW_INCS	:= $(addprefix -I,$(abspath $(INC_DIRS)))
+SRC_INCS	:= -nostdinc -I"$(BSP_INC)/" $(LIB_INCS) $(NEW_INCS) $(OTHER_INCS)
+LIB_DIR		?= $(BSP_DIR)
+LIBS		:= -lgcc -lc
+LIBS 		+= $(PROJ_LIBS)
+
+ifneq ($(BUILD_FOR_SIMULATOR),)
+# how to use ARM semihosting interface
+SEMIHOSTING_PATH := /usr/lib/arm-none-eabi/newlib/fpu
+SEMIHOSTING_LIB  := rdimon
+LIB_DIR			 := $(BSP_DIR)/qemu_bsp
+# need to see if QEMU has been installed from source, or from package manager
+# https://stackoverflow.com/a/4930778/12940429
+QEMU_DIR 		 := $(COAST_ROOT)/simulation/qemu-byu-ccl
+QEMU_FROM_SOURCE := $(or $(and $(wildcard $(QEMU_DIR)/install/bin),1),0)
+ifeq ($(QEMU_FROM_SOURCE),0)
+QEMU_INSTALL_DIR :=
+else
+QEMU_INSTALL_DIR := $(QEMU_DIR)/install/bin/
+endif
+QEMU_PLUGIN_DIR  := $(QEMU_DIR)/build/tests/plugin
+QEMU_PROF_INPUT  ?=
+QEMU_PROF_OUTPUT ?= qemu_prof_out.log
+endif
+
+# NEON support
+ifneq ($(ARM_NEON),)
+FPU_NAME := neon
+LIB_INCS := -I"$(COAST_ROOT)/build/lib/clang/7.1.0/include/" -I"$(COAST_ROOT)/llvm-project/clang/lib/Headers/" $(LIB_INCS)
+else
+FPU_NAME := vfpv3
+endif
+
+# tricky stuff to make a comma-separated list
+# https://stackoverflow.com/a/7531247
+null	:=
+space 	:= $(null) #
+comma 	:= ,
+LIBS	:= $(subst $(space),$(comma),$(strip $(LIBS)))
+
+CFLAGS 		:= -Wall -std=c99 $(USER_CFLAGS)
+CLANG_FLAGS := -fcolor-diagnostics -target arm-none-eabi $(CFLAGS) -fshort-enums -nostdlib
+# apparently clang does not correctly set some macros, so we have to do it manually
+#  if we want to use NEON intrinsics
+ifneq ($(ARM_NEON),)
+CLANG_FLAGS += -mfloat-abi=softfp -mfpu=neon-fp-armv8 -D"__ARM_NEON"
+endif
+CLANG_FLAGS += $(addprefix -D,$(USER_DEFS))
+
+ifneq ($(QEMU_PROFILE),)
+PROF_FLAGS		:= -finstrument-functions-after-inlining
+# -finstrument-function-entry-bare doesn't work because it removes the _exit calls
+# if we leave off -after-inlining, then there are sometimes multiple calls to _enter and _exit, because it would also add calls for the functions that were inlined into it
+PROF_OBJS		:= $(BUILD_DIR)/profile-skeleton.o
+CLANG_FLAGS 	+= $(PROF_FLAGS)
+else
+PROF_OBJS		:=
+endif
+
+LLC_FLAGS 	:= -asm-verbose -filetype=asm -march=arm -mcpu=cortex-a9 -mattr=+vfp3 -float-abi=hard
+
+MC_FLAGS 	:= -triple=armv7-none-gnueabi -mcpu=cortex-a9 -target-abi=hard -filetype=obj
+
+ASM_FLAGS	:= $(CFLAGS) -c -Wextra -Wno-int-to-pointer-cast -Wno-parentheses-equality -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -nostartfiles
+
+################################################################################
+# Linker stuff (have to use a different one than default)
+LD			:= $(SDK_TRIPLE)/bin/arm-none-eabi-gcc
+
+# if you have problems with bss,
+#	https://answers.launchpad.net/gcc-arm-embedded/+question/407583
+NEW_LINK_F	:= lscript_new.ld
+
+# -Wl,-Map,$(BUILD_DIR)/$(TARGET).map
+# NOTE: the 'build-id' flag is because ld will insert a section called
+#  '.note.gnu.build-id', which may not necessarily exist in the linker file
+# this makes it so we don't have to modify the linker file
+# if you want to preserve the build-id information, change the linker file
+#	http://www.chibios.com/forum/viewtopic.php?t=2268
+
+
+
+################################################################################
+# Top level rule        			                                           #
+################################################################################
+
+exe: $(BUILD_DIR)/$(TARGET).elf
+
+# make sure our build directory exists
+$(BUILD_DIR)/:
+	@mkdir -p $@
+
+# make sure we have a modified linker file
+SEARCH_TERM	:= __bss_end = .;
+INSERT_TEXT	:= /* added */\n   __bss_start__ = __bss_start;\n   __bss_end__ = __bss_end;
+$(BUILD_DIR)/$(NEW_LINK_F): $(LNK_SCRIPT)
+	@awk "/$(SEARCH_TERM)/{print;print \"$(INSERT_TEXT)\";next}1" $(LNK_SCRIPT) > $(BUILD_DIR)/$(NEW_LINK_F)
+
+
+################################################################################
+# Link everything together                                          		   #
+################################################################################
+LD_FLAGS	:= -fdiagnostics-color -fshort-enums -mcpu=cortex-a9 -mfpu=$(FPU_NAME) -mfloat-abi=hard -mhard-float -Wl,--build-id=none -specs=$(SPEC_SRC) -Wl,-T -Wl,$(BOARD_DIR)/sw/lscript.ld -Wl,-Map,$(BUILD_DIR)/$(TARGET).map
+LD_LIBS		:= -Wl,-L$(BUILD_DIR),-L$(LIB_DIR) -Wl,--start-group,$(LIBS),--end-group
+ifneq ($(BUILD_FOR_SIMULATOR),)
+LD_FLAGS    := -Wl,-L$(SEMIHOSTING_PATH) -specs=rdimon.specs $(LD_FLAGS)
+LD_LIBS     := $(LD_LIBS) -Wl,-lrdimon -Wl,--defsym=end=_end
+LD 			:= arm-none-eabi-gcc
+# comes from package `libnewlib-arm-none-eabi`
+endif
+
+$(BUILD_DIR)/$(TARGET).elf: $(BSP_LIB) $(BUILD_DIR)/$(TARGET).o $(XTRA_OBJS) $(PROF_OBJS) | $(BUILD_DIR)/$(NEW_LINK_F)
+	@echo -e $(COLOR_MAGENTA)linking with libraries $(NO_COLOR)
+	@echo -e '  'flags = $(LD_FLAGS)
+	@echo -e '  'libs = $(LD_LIBS)
+	@$(LD) -g $(LD_FLAGS) $^ -o $@ $(LD_LIBS)
+
+
+################################################################################
+# Create object file (machine code) from assembly  			                   #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET).o: $(BUILD_DIR)/$(TARGET).s
+	@echo -e $(COLOR_BLUE)translating to machine code $(NO_COLOR)
+	@echo -e '  'flags = $(MC_FLAGS)
+	@$(LLVM_MC) $< $(MC_FLAGS) -o $@
+
+# special rule for profiling sources
+$(BUILD_DIR)/profile-skeleton.o: $(BOARD_DIR)/sw/profile-skeleton.S
+	$(LLVM_MC) $< $(MC_FLAGS) -o $@
+
+
+################################################################################
+# Compile to architecture specific assembly			                           #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET).s: $(BUILD_DIR)/$(TARGET).opt.bc
+	@echo -e $(COLOR_MAGENTA)compiling to assembly $(NO_COLOR)
+	@echo -e '  'flags = $(LLC_FLAGS)
+	@$(LLVM_LLC) $(LLC_FLAGS) $< -o=$@
+
+
+################################################################################
+# Run through the optimizer   			                                       #
+################################################################################
+
+.DELETE_ON_ERROR:
+
+$(BUILD_DIR)/$(TARGET).opt.bc: $(BUILD_DIR)/$(TARGET)_linked_all.bc
+	@echo -e $(COLOR_BLUE)running through optimizer $(NO_COLOR)
+	@echo -e '  'passes = $(OPT_PASSES)
+	@echo -e '  'flags  = $(OPT_FLAGS)
+	@$(LLVM_DIS) -f $<
+	@$(LLVM_OPT) $(OPT_FLAGS) $(OPT_LIBS_LOAD) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_DIS) -f $@
+
+
+################################################################################
+# Link with the kernel sources		                                       	   #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET)_linked_all.bc: $(BUILD_DIR)/$(TARGET).opt1.bc $(KOBJS)
+	@echo -e $(COLOR_MAGENTA)linking application bc files with kernel files $(NO_COLOR)
+	@$(LLVM_LINK) $(BUILD_DIR)/$(TARGET).opt1.bc $(KOBJS) -o $@
+
+
+################################################################################
+# Run through the optimizer the first time			                           #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET).opt1.bc: $(BUILD_DIR)/$(TARGET)_linked.bc
+	@echo -e $(COLOR_BLUE)optimizing application files $(NO_COLOR)
+	@echo -e '  'flags  = $(OPT_FLAGS)
+	@$(LLVM_OPT) $(OPT_FLAGS) -o $@ $<
+
+
+################################################################################
+# Linking the modules together			                                       #
+################################################################################
+
+$(BUILD_DIR)/$(TARGET)_linked.bc: $(BC_FILES)
+	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $@
+
+
+################################################################################
+# Rules for .bc compilation			                                           #
+################################################################################
+
+# have to create a separate rule for each source directory
+#  but we can use a special construct to generate rules
+SUFFIXES	:= _linked.bc _linked.ll .s .opt.ll .opt.bc .o .map .elf
+EXE_FILES	:= $(addprefix $(TARGET),$(SUFFIXES))
+EXE_FILES	:= $(addprefix $(BUILD_DIR)/, $(EXE_FILES))
+
+# there could be problems with this approach, expanding $(dir) correctly
+define bc_file_compile =
+dir := $(1)
+
+C_SRCS	 	:= $$(wildcard $$(dir)/*.c)
+C_SRC_NEW	:= $$(addprefix $$(BUILD_DIR)/,$$(notdir $$(C_SRCS)))
+EXE_FILES 	+= $$(patsubst %.c,%.bc, $$(C_SRC_NEW))
+EXE_FILES 	+= $$(patsubst %.c,%.ll, $$(C_SRC_NEW))
+
+$$(BUILD_DIR)/%.bc: $$(dir)/%.c $(INC_FILES) | $$(BUILD_DIR)/
+	@echo -e $$(COLOR_BLUE)Building $$(notdir $$@)$$(NO_COLOR)
+	@$$(CLANG) -emit-llvm $$(CLANG_FLAGS) $$(SRC_INCS) $$< -c -o $$@
+
+endef
+
+$(foreach dir,$(PROJECT_SRC),$(eval $(call bc_file_compile,$(dir))))
+
+# how to debug expansion
+# https://stackoverflow.com/questions/19412960/display-the-results-of-foreach-eval-call-expansion
+
+
+################################################################################
+# Rules for .bc compilation - for kernel sources	                           #
+################################################################################
+
+.PHONY: k_include kernel
+
+kernel: k_include $(KOBJS)
+
+
+KERNEL_MAKE		:= $(CURDIR)/makefile.rtos
+K_BUILD			:= "BUILD_DIR=$(abspath $(BUILD_DIR))"
+K_LEVEL			:= "LEVEL=$(abspath $(LEVEL))"
+K_ADD_DEF		:= "XDEFS=$(USER_DEFS)"
+K_INCS			:= "USER_INCS=$(SRC_INCS)"
+KERNEL_FLAGS	:= $(K_BUILD) $(K_LEVEL) $(K_ADD_DEF) $(K_INCS)
+
+ifneq ($(QEMU_PROFILE),)
+KERNEL_FLAGS 	+= "PROF_FLAGS=$(PROF_FLAGS)"
+endif
+
+define kernel_inc =
+@echo -e $(COLOR_MAGENTA)Copying kernel include files from $(1) $(NO_COLOR)
+@make -C $(1) --file=$(KERNEL_MAKE) $(KERNEL_FLAGS) --no-print-directory include -j4
+
+endef
+
+k_include:
+	$(foreach dir,$(KERNEL_DIRS),$(call kernel_inc,$(dir)))
+
+
+define asm_comp =
+
+$$(BUILD_DIR)/$(patsubst %.S,%.o,$(shell basename $(1))): $(1)
+	@echo -e $$(COLOR_MAGENTA)Build kernel dir $(dir $(1)) $$(NO_COLOR)
+	@make -C $(dir $(1)) --file=$$(KERNEL_MAKE) $$(KERNEL_FLAGS) --no-print-directory libs -j4
+
+endef
+
+
+define kernel_comp =
+
+K_C_DEPS := $$(wildcard $(1)*.c)
+K_S_DEPS := $$(wildcard $(1)*.S)
+
+$$(BUILD_DIR)/$(shell basename $(shell dirname $(1))).opt.bc: $$(K_C_DEPS) $$(K_S_DEPS)
+	@echo -e $$(COLOR_MAGENTA)Build kernel dir $(1) $$(NO_COLOR)
+	@make -C $(1) --file=$$(KERNEL_MAKE) $$(KERNEL_FLAGS) --no-print-directory libs -j4
+
+$(foreach obj,$(K_S_DEPS),$(eval $(call asm_comp,$(obj))))
+
+endef
+
+$(foreach dir,$(KERNEL_DIRS),$(eval $(call kernel_comp,$(dir))))
+
+
+################################################################################
+# Rules for running the executable with QEMU                                   #
+################################################################################
+
+.PHONY: qemu qemu-dbg qemu-print
+
+SEMIHOST_FLAGS  := -semihosting --semihosting-config enable=on,target=native
+QEMU_DISP_FLAGS := -nographic -serial mon:stdio
+QEMU_MACH_FLAGS := -machine xilinx-zynq-a9 -m 512M -cpu cortex-a9
+QEMU_ALL_FLAGS  := $(SEMIHOST_FLAGS) $(QEMU_DISP_FLAGS) $(QEMU_MACH_FLAGS)
+QEMU_DBG_FLAGS  := -gdb tcp::12345 -S
+
+qemu:
+	@$(QEMU_INSTALL_DIR)qemu-system-arm $(QEMU_ALL_FLAGS) -kernel $(BUILD_DIR)/$(TARGET).elf
+
+qemu-dbg:
+	@$(QEMU_INSTALL_DIR)qemu-system-arm $(QEMU_ALL_FLAGS) $(QEMU_DBG_FLAGS) -kernel $(BUILD_DIR)/$(TARGET).elf
+
+qemu-profile:
+	$(QEMU_INSTALL_DIR)/qemu-system-arm $(QEMU_ALL_FLAGS) -kernel $(BUILD_DIR)/$(TARGET).elf -plugin $(QEMU_PLUGIN_DIR)/libprofile.so,arg=$(QEMU_PROF_INPUT),arg=$(QEMU_PROF_OUTPUT) -d plugin
+
+qemu-print:
+	@echo $(QEMU_DIR)
+	@echo $(QEMU_INSTALL_DIR)
+
+
+################################################################################
+# Rules for building the BSP		                                           #
+################################################################################
+
+.PHONY: bsp bsp_lib bsp_include
+
+# BSP_DIRS	:= $(shell find ${BSP_DIR}/ps7_cortexa9_0/libsrc/*/src/ -type d -print)
+# all the dirs with source files for compiling BSP
+BSP_SRCS	:= $(filter %/src/,$(BSP_DIRS))
+BSP_FRTOS_SRC := $(filter %/freertos10_xilinx_v1_1/src/,$(BSP_SRCS))
+BSP_STALN_SRC := $(filter %/standalone_v6_7/src/,$(BSP_SRCS))
+
+# debug
+# BSP_SRCS 	:= $(word 1, $(BSP_SRCS))
+BSP_LIBX_NAME	:= libxil.a
+BSP_SFLAGS		:= "SHELL=/bin/sh"
+BSP_BUILD		:= "BUILD_DIR=$(abspath $(BUILD_DIR))"
+BSP_LEVEL		:= "LEVEL=$(abspath $(LEVEL))"
+BSP_LIB			:= $(BSP_DIR)/$(BSP_LIBX_NAME)
+BSP_LIB_PATH	:= "LIB=$(abspath $(BSP_LIB))"
+BSP_MAKE		:= $(CURDIR)/makefile.bspsrc
+BSP_ADD_DEF		:= "XDEFS=$(BSP_XDEFS)"
+BSP_ALL_FLAGS	:= $(BSP_SFLAGS) $(BSP_LEVEL) $(BSP_BUILD) $(BSP_ADD_DEF) $(BSP_LIB_PATH)
+
+
+# there are some weird Make errors that come from reading the target Makefile twice
+# not sure how to get rid of them, but they aren't causing any problems
+# https://www.gnu.org/software/make/manual/html_node/Error-Messages.html
+# see warning on ignoring & overriding
+# @{ { make -C $(1) -s include $(BSP_SFLAGS); } 2>&3 | sed 's/^/STDOUT: /'; } 3>&1 1>&2 | sed 's/^/STDERR: /' | sed '/: warning: /d'
+define bsp_inc_comp =
+@echo -e $(COLOR_MAGENTA)Running make include: $(NO_COLOR)$(1)
+@make -C $(1) --file=$(BSP_MAKE) --no-print-directory -s include $(BSP_SFLAGS) $(BSP_LEVEL) 2>&1 | sed '/: warning: /d'
+
+endef
+# $(BSP_BUILD)
+
+define bsp_lib_comp =
+@echo -e $(COLOR_MAGENTA)Running make libs $(1) $(NO_COLOR)
+@make -C $(1) --file=$(BSP_MAKE) --no-print-directory -s libs $(BSP_ALL_FLAGS) -j4 2>&1 | sed '/: warning: /d'
+
+endef
+
+define bsp_lib_clean =
+@make -C $(1) --file=$(BSP_MAKE) --no-print-directory -s clean $(BSP_ALL_FLAGS) -j4 2>&1 | sed '/: warning: /d'
+
+endef
+
+bsp_lib:
+	@echo -e $(COLOR_YELLOW)compiling bsp $(NO_COLOR)
+	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_comp,$(abspath $(dir))))
+
+bsp_include:
+	@echo -e $(COLOR_YELLOW)including bsp $(NO_COLOR)
+	$(foreach dir,$(BSP_SRCS),$(call bsp_inc_comp,$(dir)))
+
+bsp: $(BSP_LIB)
+
+$(BSP_LIB): | $(BUILD_DIR)/
+	@make --no-print-directory bsp_include
+	@make --no-print-directory bsp_lib
+
+################################################################################
+# Cleaning Rules           			                                           #
+################################################################################
+
+.PHONY: clean superclean clean_exe clean_lib clean_bsp clean_opt clean_sim
+
+superclean: clean clean_bsp
+
+# the -delete flag is not POSIX, so use exec rm if otherwise
+# @find $(BUILD_DIR)/ ! -name $(BSP_LIBX_NAME) -type f -delete
+clean:
+	@rm -rf $(BUILD_DIR)
+
+clean_exe:
+	@rm -f $(EXE_FILES)
+
+clean_lib:
+	@rm -f $(BSP_LIB)
+
+clean_bsp:
+	$(foreach dir,$(BSP_SRCS),$(call bsp_lib_clean, $(dir)))
+
+clean_opt:
+	@rm -f $(BUILD_DIR)/$(TARGET).opt.bc
+
+# clean all files that differ between simulation and hardware execuation compatibility
+# if we ever make configASSERT be something different between the two,
+#  then we'll have to clean all the files
+SIM_CLEAN_FILES := boot.o cpu_init.o xil_exception.bc standalone_v6_7.opt.bc xscugic_selftest.bc scugic_v3_9.opt.bc port.bc freertos10_xilinx_v1_1.opt.bc main.bc global.bc checker.bc checkErrors.bc xil-crt0.o
+SIM_CLEAN_FILES := $(addprefix $(BUILD_DIR)/,$(SIM_CLEAN_FILES))
+
+clean_sim:
+	@rm -f $(SIM_CLEAN_FILES)
+
+################################################################################
+# Debug Stuff              			                                           #
+################################################################################
+
+.PHONY: print print_bsp print_kernel
+
+print:
+	@echo $(CURDIR)
+	@echo $(PROJECT_SRC)
+	@echo $(CSRCS)
+	@echo $(KDIR_NAMES)
+
+print_bsp:
+	@echo $(BSP_SRCS)
+	@echo $(words $(BSP_SRCS))
+	@echo $(BSP_FRTOS_SRC)
+	@echo $(BSP_LIB)
+	@echo $(BSP_ADD_DEF)
+
+# @echo $(KCSRCS)
+print_kernel:
+	@echo $(ASMSRCS)
+	@echo $(XTRA_OBJS)
+	@echo $(KDIR_NAMES)
+	@echo $(KOBJS)
+
+################################################################################
+# Make control flow graphs 			                                           #
+################################################################################
+
+.PHONY: cfg
+
+cfg: $(BUILD_DIR)/$(TARGET).opt.ll $(BUILD_DIR)/$(TARGET)_linked_all.ll
+	@rm -rf cfg
+	@mkdir cfg
+	$(LLVM_OPT) --dot-cfg $(BUILD_DIR)/$(TARGET)_linked_all.ll > /dev/null
+	$(eval DOT_FILES = *.dot)
+	for file in $(DOT_FILES); do \
+		dot $$file -Tpdf > ./cfg/$$file.clang.pdf ;\
+	done
+	$(LLVM_OPT) --dot-cfg $(BUILD_DIR)/$(TARGET).opt.ll > /dev/null
+	for file in $(DOT_FILES); do \
+		dot $$file -Tpdf > ./cfg/$$file.opt.pdf ;\
+	done
+	rm -rf *.dot

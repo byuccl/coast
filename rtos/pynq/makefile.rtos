@@ -1,0 +1,186 @@
+################################################################################
+# This Makefile is to be used with each of the source folders in the bsp	   #
+#  based on the Makefiles found in the src folders themselves				   #
+#  but intended to be used with the COAST toolchain instead					   #
+#																			   #
+################################################################################
+
+include $(LEVEL)/makefiles/colors
+
+# set up paths and flags
+# finding if path exists using Gnu Make
+# https://stackoverflow.com/a/20566812/12940429
+SDK_IS_INSTALLED 	:= $(or $(and $(wildcard $(XILINX_SDK)/gnu/aarch32/lin/gcc-arm-none-eabi),1),0)
+ifeq ($(SDK_IS_INSTALLED),0)
+COMPILER                := arm-none-eabi-gcc
+ARM_GCC_INC             := /usr/lib/gcc/arm-none-eabi/6.3.1/include
+else
+SDK_TRIPLE				:= $(XILINX_SDK)/gnu/aarch32/lin/gcc-arm-none-eabi
+COMPILER				:= $(SDK_TRIPLE)/bin/arm-none-eabi-gcc
+ARM_GCC_INC             := $(SDK_TRIPLE)/arm-none-eabi/libc/usr/include
+endif
+CP						:= cp
+CFLAGS 					:= -g -Wall -O2
+COMPILER_FLAGS			:= $(CFLAGS) -c -Wextra -Wno-int-to-pointer-cast -Wno-parentheses-equality
+EXTRA_COMPILER_FLAGS	:= -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -nostartfiles
+CLANG_FLAGS				:= -fcolor-diagnostics -target arm-none-eabi $(COMPILER_FLAGS) -fshort-enums -nostdlib
+
+ifneq ($(XDEFS),)
+NEW_DEFS	:= $(addprefix -D,$(XDEFS))
+CLANG_FLAGS += $(NEW_DEFS)
+EXTRA_COMPILER_FLAGS	+= $(NEW_DEFS)
+endif
+
+PROF_FLAGS	?=
+ifneq ($(PROF_FLAGS),)
+CLANG_FLAGS	+= $(PROF_FLAGS)
+endif
+
+# default values for build directory and lib name
+BUILD_DIR	?= .
+
+INCLUDEDIR=../../include
+INCLUDES=-I$(INCLUDEDIR) -I$(ARM_GCC_INC) -I$(LEVEL) $(USER_INCS)
+
+# these have been rewritten to make the wildcarding more robust
+LIBSOURCES 	 := $(wildcard *.c)
+ASMSOURCES	 := $(wildcard *.S)
+OBJECTS 	 :=	$(patsubst %.S,$(BUILD_DIR)/%.o,$(notdir $(ASMSOURCES)))
+INCLUDEFILES := $(wildcard *.h)
+
+# see if LLVM has been built from source, or installed as a package
+LLVM_FROM_SOURCE 	:= $(or $(and $(wildcard $(LEVEL)/../build/bin),1),0)
+# variables added for COAST build flow
+ifeq ($(LLVM_FROM_SOURCE),0)
+CLANG 		:= clang-7
+LLVM_DIS 	:= llvm-dis-7
+LLVM_OPT 	:= opt-7
+LLVM_LLI 	:= lli-7
+LLVM_LLC 	:= llc-7
+LLVM_LINK	:= llvm-link-7
+LLVM_MC	  	:= llvm-mc-7
+else
+LLVM_ROOT   := $(LEVEL)/../build/bin
+CLANG 		:= $(LLVM_ROOT)/clang
+LLVM_DIS 	:= $(LLVM_ROOT)/llvm-dis
+LLVM_LLC 	:= $(LLVM_ROOT)/llc
+LLVM_OPT 	:= $(LLVM_ROOT)/opt
+LLVM_LINK	:= $(LLVM_ROOT)/llvm-link
+LLVM_MC	 	:= $(LLVM_ROOT)/llvm-mc
+endif
+
+THIS_DIR	:= $(shell pwd)
+BC_FILES	:= $(patsubst %.c,$(BUILD_DIR)/%.bc,$(notdir $(LIBSOURCES)))
+
+LIB_TARGET 	:= $(shell basename $(shell dirname $(THIS_DIR)))
+SUFFIXES	:= _linked.bc _linked.ll .s .opt.bc .o
+# .opt.ll
+EXE_FILES	:= $(addprefix $(BUILD_DIR)/$(LIB_TARGET),$(SUFFIXES))
+
+space:=
+space+=
+
+
+# parameters for the LLVM optimizer:
+OPT_FLAGS  	:= -O2
+OPT_PASSES 	:=
+
+
+################################################################################
+# Rules for copying include files  		                                       #
+################################################################################
+
+# use conditionals to make sure that there are files to copy
+include:
+ifeq ($(INCLUDEFILES),)
+	@echo "no include files to copy"
+else
+	@${CP} $(INCLUDEFILES) $(INCLUDEDIR)
+endif
+
+
+################################################################################
+# Rules for .bc compilation			                                           #
+################################################################################
+
+$(BUILD_DIR)/%.bc: %.c
+	@echo -e $(COLOR_BLUE)Building $@ $(NO_COLOR)
+	@echo -e '  'flags  = $(CLANG_FLAGS)
+	@$(CLANG) $(CLANG_FLAGS) -flto -emit-llvm $(INCLUDES) $< -c -o $@
+
+
+################################################################################
+# Linking the modules together			                                       #
+################################################################################
+
+$(BUILD_DIR)/$(LIB_TARGET)_linked.bc: $(BC_FILES)
+	@echo -e $(COLOR_MAGENTA)linking .bc files $(NO_COLOR)
+	@$(LLVM_LINK) $^ -o $@
+
+
+################################################################################
+# Run through the optimizer   			                                       #
+################################################################################
+
+$(BUILD_DIR)/$(LIB_TARGET).opt.bc: $(BUILD_DIR)/$(LIB_TARGET)_linked.bc
+	@echo -e $(COLOR_YELLOW)running through optimizer $(NO_COLOR)
+	@echo -e '  'flags  = $(OPT_FLAGS)
+	@echo -e '  'passes = $(OPT_PASSES)
+	@$(LLVM_DIS) -f $<
+	@$(LLVM_OPT) $(OPT_FLAGS) $(OPT_PASSES) -o $@ $<
+	@$(LLVM_DIS) -f $@
+
+
+################################################################################
+# Compile the assembly files into object files     			                   #
+################################################################################
+
+$(BUILD_DIR)/%.o: %.S
+	@echo -e $(COLOR_BLUE)Building $@ $(NO_COLOR)
+	@$(COMPILER) $(COMPILER_FLAGS) $(EXTRA_COMPILER_FLAGS) $(INCLUDES) $< -o $@
+
+
+################################################################################
+# We need the optimized IR code and the compiled assembly code                 #
+################################################################################
+
+kernel: $(BUILD_DIR)/$(LIB_TARGET).opt.bc $(OBJECTS)
+
+
+################################################################################
+# Top level rule        			                                           #
+################################################################################
+
+# use conditionals to make sure that there are files to compile
+ifeq ($(LIBSOURCES),)
+libs:
+	@echo "no sources to compile"
+else
+libs: kernel
+endif
+# add clean in above for production
+
+
+.PHONY: clean print help test_print
+
+clean:
+	@rm -f $(EXE_FILES)
+	@rm -f $(BC_FILES)
+	@rm -f $(OBJECTS)
+
+# debug information
+print:
+	@echo $(EXE_FILES)
+	@echo $(OBJECTS)
+	@echo $(BC_FILES)
+
+test_print:
+	@echo $(LIB_TARGET)
+	@echo $(MAKEFILE_LIST)
+	@echo $(INCLUDEFILES)
+	@echo $(COMPILER)
+
+help:
+	@echo -e $(COLOR_GREEN)BSP sub folder makefile:
+	@echo -e builds the objects in a given folder in the bsp library,
+	@echo -e which will be linked into the project at compile time$(NO_COLOR)

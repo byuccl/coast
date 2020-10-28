@@ -1,0 +1,3 @@
+[submodule "simulation/qemu-byu-ccl"]
+	path = simulation/qemu-byu-ccl
+	url = git@github.com:byuccl/qemu.git

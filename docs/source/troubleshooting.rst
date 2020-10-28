@@ -3,7 +3,9 @@
 Troubleshooting
 *******************
 
-Although it is unlikely, there is a possibility that COAST could cause user code to crash. This is most often due to complications over what should be replicated, as described in the :ref:`when_repl_cmds` and :ref:`repl_scope` sections. If the crash occurs during compilation, please submit a report to jgoeders@byu.edu. If the code compiles but does not run properly, here are several steps we have found helpful. Note that running with DWC often exposes these errors, but TMR silently masks incorrect execution, which can make debugging difficult.
+Although it is unlikely, there is a possibility that COAST could cause user code to crash. This is most often due to complications over what should be replicated, as described in the :ref:`when_repl_cmds` and :ref:`repl_scope` sections. If the crash occurs during compilation, please submit a report to jgoeders@byu.edu or `create an issue`_. If the code compiles but does not run properly, here are several steps we have found helpful. Note that running with DWC often exposes these errors, but TMR silently masks incorrect execution, which can make debugging difficult.
+
+.. _create an issue: https://github.com/byuccl/coast/issues
 
 Troubleshooting Ideas
 =======================

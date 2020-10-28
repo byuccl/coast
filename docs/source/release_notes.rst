@@ -4,6 +4,23 @@ Release Notes
 **************
 
 
+v1.5 - October 2020
+=====================
+
+Fault Injection Supervisor
+---------------------------
+
+Python scripts which comprise the :ref:`fault_injection` interface.
+
+
+FreeRTOS Example Applications
+------------------------------
+
+Example :ref:`freertos_apps` that run on the FreeRTOS kernel, plus how to protect them with COAST.
+
+Documentation also updated to include information about the :ref:`baremetal_tests`.
+
+
 v1.4 - August 2020
 =====================
 

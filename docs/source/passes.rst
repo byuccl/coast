@@ -308,6 +308,14 @@ When to use replication command line options
       - Library
       - N/A
       - Can't protect it if you don't have the source code.
+    * - Return multiple values
+      - User
+      - ``-cloneReturn=<X>``
+      - When calling the function multiple times would have unwanted side effects.
+    * -
+      - Library
+      - N/A
+      - Cannot modify the source code of library functions.
 
 
 .. _repl_details:
