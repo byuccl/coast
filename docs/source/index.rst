@@ -62,27 +62,39 @@ Benchmarks we use to validate the correct operation of COAST.
 Results
 ========
 
-See the results of fault injection and radiation beam testing
+COAST has been validated multiple times using fault injection and radiation beam testing.  A number of these results have been published and are summarized below:
 
-.. toctree::
-    :maxdepth: 1
-    :glob:
+`Compiler-Assisted Software Fault Tolerance for Microcontrollers`_ - Matthew Bohman's Masters Thesis
 
-    results/*
+- | Fault injection testing of MSP430 (Chapter 4)
+  | Mean work to failure (MWTF) increased on average by 20x
 
-.. Add more results?
+- | Radiation testing of MSP430 (Chapter 5)
+  | MWTF increased by 2.4x -- 3.9x
 
 
-Additional Resources
-=====================
+`Microcontroller Compiler-Assisted Software Fault Tolerance`_ - IEEE Transactions on Nuclear Science, Vol. 66 Issue 1
 
-- Matthew Bohman's `Master's thesis`_.
+- | Fault injection testing of MSP430
+  | MWTF increased by 11.4x -- 28.0x
 
-- IEEE Transactions on Nuclear Science, Vol. 66 Issue 1 - `Microcontroller Compiler-Assisted Software Fault Tolerance`_
+- | Radiation testing of MSP430
+  | MWTF increased by 4.3x -- 7.1x
 
-- IEEE Transactions on Nuclear Science, Vol. 67 Issue 1 - `Applying Compiler-Automated Software Fault Tolerance to Multiple Processor Platforms`_
 
-.. _Master's thesis: https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7724&context=etd
+`Applying Compiler-Automated Software Fault Tolerance to Multiple Processor Platforms`_ - IEEE Transactions on Nuclear Science, Vol. 67 Issue 1
+
+- | Radiation testing of SiFive HiFive Freedom E310 (RISC-V)
+  | MWTF increased by 2.0x -- 35.9x
+
+- | Radiation testing of PYNQ-Z1 ARM Cortex-A9
+  | MWTF increased by 1.2x -- 10.0x
+
+- | Radiation testing of AVNET Ultra96 ARM Cortex-A53
+  | Not enough errors observed during test
+
+
+.. _Compiler-Assisted Software Fault Tolerance for Microcontrollers: https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7724&context=etd
 
 .. _Microcontroller Compiler-Assisted Software Fault Tolerance: https://ieeexplore.ieee.org/document/8571250
 
